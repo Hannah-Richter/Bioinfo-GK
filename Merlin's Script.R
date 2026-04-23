@@ -38,4 +38,6 @@ length(grep("paper", colnames(anot)))
 colnames(anot) <- c(colnames(anot)[1], colnames(anot)[-1] %>% substring(7))
 # All data retained apart from staging categorisation
 
-                    
+anot <- anot %>% mutate(is.tumour = anot$barcode %>% substring(14, 15)=="01") 
+# based on bargode segment 4, encoding tumour as 01 and healty as 11
+
