@@ -41,3 +41,11 @@ colnames(anot) <- c(colnames(anot)[1], colnames(anot)[-1] %>% substring(7))
 anot <- anot %>% mutate(is.tumour = anot$barcode %>% substring(14, 15)=="01") 
 # based on bargode segment 4, encoding tumour as 01 and healty as 11
 
+
+
+sub.anot <- anot[!is.na(anot$expression_subtype),]
+sub.exp <- exp[,match(sub.anot$barcode, colnames(exp))]
+
+exp.var <- sub.exp %>% apply(1, var)
+
+t50.exp.var <- sort(exp.var)[1:50]
