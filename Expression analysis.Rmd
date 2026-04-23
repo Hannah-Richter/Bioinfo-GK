@@ -1,4 +1,9 @@
 #Step1 Data Exploration
 table(luad_anot_clean$paper_expression_subtype)
 table(luad_anot_clean$ajcc_pathologic_stage)
+
 #normal tissue samples
+table_type <- table(substr(luad_anot_clean$barcode, 14, 15))
+names(table_type) <- c("Tumor (01)", "Normal (11)")
+table_type
+#there are only 44 normale tissue samples
