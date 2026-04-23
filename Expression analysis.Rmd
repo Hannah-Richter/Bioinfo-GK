@@ -1,5 +1,4 @@
 #Step1 Data Exploration
 table(luad_anot_clean$paper_expression_subtype)
 table(luad_anot_clean$ajcc_pathologic_stage)
-#normal tissue samples are Oncogene Negative
-table(luad_anot_clean$paper_Oncogene.Negative.or.Positive.Groups)
+#normal tissue samples
