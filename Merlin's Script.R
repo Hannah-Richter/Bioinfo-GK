@@ -1,9 +1,10 @@
 library(tidyverse)
 library(dplyr)
+library(randomForest)
 
 rm(list=ls())
 
-load("LUAD_data.RData")
+load("/Users/merlin/Documents/GitHub/bioinfo-gk/LUAD_data.RData")
 
 anot <- luad_anot_clean
 anot$paper_patient <- strtrim(anot$barcode, 12)
@@ -38,14 +39,30 @@ length(grep("paper", colnames(anot)))
 colnames(anot) <- c(colnames(anot)[1], colnames(anot)[-1] %>% substring(7))
 # All data retained apart from staging categorisation
 
-anot <- anot %>% mutate(is.tumour = anot$barcode %>% substring(14, 15)=="01") 
+anot$expression_subtype <- anot$expression_subtype %>% factor()
+anot <- anot %>% mutate(is.tumour = substring(anot$barcode, 14, 15)=="01") 
 # based on bargode segment 4, encoding tumour as 01 and healty as 11
 
+train.anot <- anot[!is.na(anot$expression_subtype),]
+train.exp <- exp[,match(train.anot$barcode, colnames(exp))]
+
+exp.var <- train.exp %>% apply(1, var)
+t50.train.exp.var <- t(train.exp[names(sort(exp.var)[1:50]),])
+train <- data.frame(factor(train.anot$expression_subtype), t50.train.exp.var)
+colnames(train) <- c("expression_subtype", colnames(train)[-1])
+
+rf.reg <- randomForest(expression_subtype ~ ., data = train, importance = TRUE, ntree = 500)
+
+# log.reg <- glm(train$expression_subtype ~ t50.train.exp.var, family="binomial")
+
+predict.anot <- anot[is.na(anot$expression_subtype),]
+predict.exp <- exp[,match(predict.anot$barcode, colnames(exp))]
+
+t50.predict.exp.var <- t(predict.exp[names(sort(exp.var)[1:50]),])
+predict <- data.frame(factor(predict.anot$expression_subtype), t50.predict.exp.var)
+colnames(predict) <- c("expression_subtype", colnames(predict)[-1])
 
 
-sub.anot <- anot[!is.na(anot$expression_subtype),]
-sub.exp <- exp[,match(sub.anot$barcode, colnames(exp))]
+rf.pred <- predict(rf.reg, predict)
 
-exp.var <- sub.exp %>% apply(1, var)
-
-t50.exp.var <- sort(exp.var)[1:50]
+# log.pred <- predict(log.reg, predict)
