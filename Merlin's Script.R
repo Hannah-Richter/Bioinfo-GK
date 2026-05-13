@@ -1,10 +1,27 @@
 library(tidyverse)
 library(dplyr)
 library(randomForest)
+library(ggplot2)
 
 rm(list=ls())
 
-load("/Users/merlin/Documents/GitHub/bioinfo-gk/LUAD_data.RData")
+load("LUAD_data.RData")
+
+NA_flattener <- function(data) {
+  as.data.frame(apply(data, 2, function(x) {
+    x[which(x=="[unknown]" | x=="[not available]" | x=="[Not Available]")] <- NA
+    return(x)
+  }))
+}
+
+NA_counter <- function(data, per_col=F) {
+  s <- apply(data, 2, function(k) sum(is.na(k)))
+  if (per_col) return(s) else return (sum(s))
+}
+
+level_counter <- function (data) {
+  return(sapply(levels(data), function(x) sum(data==x)))
+}
 
 anot <- luad_anot_clean
 anot$paper_patient <- strtrim(anot$barcode, 12)
@@ -16,20 +33,9 @@ exp <- column_to_rownames(luad_exp_clean, "gene")
 # names(patient_sex) <- anot$paper_patient[!is.na(anot$paper_Sex)]
 # patient_sex <- patient_sex[-which(patient_sex=="[unknown]")]
 
-exp <- as.data.frame(apply(exp, 2, function(x) {
-  x[which(x=="[unknown]" | x=="[not available]" | x=="[Not Available]")] <- NA
-  return(x)
-}))
+exp <- NA_flattener(exp)
 
-anot <- as.data.frame(apply(anot, 2, function(x) {
-  x[which(x=="[unknown]" | x=="[not available]" | x=="[Not Available]")] <- NA
-  return(x)
-}))
-
-sum(apply(exp, 2, function(k) sum(is.na(k)))) # no NAs in exp
-sum(apply(anot, 2, function(k) sum(is.na(k)))) # 5623 NAs in anot
-
-sum(apply(anot, 2, function(k) sum(is.na(k))))/{dim(anot)[1]*dim(anot)[2]}
+anot <- NA_flattener(anot)
 
 length(grep("paper", colnames(anot)))
 # How many paper_ columns are retained? >> 20
@@ -37,9 +43,16 @@ length(grep("paper", colnames(anot)))
 colnames(anot) <- c(colnames(anot)[1], colnames(anot)[-1] %>% substring(7))
 # All data retained apart from staging categorisation
 
+NA_counter(exp) # no NAs in exp
+NA_counter(anot) # 5623 total NAs in anot
+NA_counter(anot, T) # looking at distribution across rows
+
+anot %>% NA_counter(T) %>% .['barcode']
+# Just checking the 
+
 anot$expression_subtype <- anot$expression_subtype %>% factor()
-anot <- anot %>% mutate(is.tumour = substring(anot$barcode, 14, 15)=="01") 
-# based on bargode segment 4, encoding tumour as 01 and healty as 11
+anot <- anot %>% mutate(is.tumour = substring(barcode, 14, 15)=="01") 
+# based on the number of barcode segment 4, encoding tumour as 01 and healty as 11
 
 train.anot <- anot[!is.na(anot$expression_subtype),]
 train.exp <- exp[,match(train.anot$barcode, colnames(exp))]
@@ -65,4 +78,14 @@ rf.pred <- predict(rf.reg, predict)
 
 # log.pred <- predict(log.reg, predict)
 
-rf.pred
+ggplot() +
+  geom_bar(aes(x=rf.pred), color='black', fill='white') +
+  labs(title='Distribution in Random Forest Prediction') +
+  theme_bw()
+
+ggplot() +
+  geom_bar(aes(x=train$expression_subtype), color='black', fill='white') +
+  labs(title='Distribution in Training Data') +
+  theme_bw()
+
+level_counter(train$expression_subtype) - level_counter(rf.pred)
