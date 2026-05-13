@@ -17,14 +17,12 @@ exp <- column_to_rownames(luad_exp_clean, "gene")
 # patient_sex <- patient_sex[-which(patient_sex=="[unknown]")]
 
 exp <- as.data.frame(apply(exp, 2, function(x) {
-  d <- which(x=="[unknown]" | x=="[not available]" | x=="[Not Available]")
-  x[d] <- NA
+  x[which(x=="[unknown]" | x=="[not available]" | x=="[Not Available]")] <- NA
   return(x)
 }))
 
 anot <- as.data.frame(apply(anot, 2, function(x) {
-  d <- which(x=="[unknown]" | x=="[not available]" | x=="[Not Available]")
-  x[d] <- NA
+  x[which(x=="[unknown]" | x=="[not available]" | x=="[Not Available]")] <- NA
   return(x)
 }))
 
@@ -66,3 +64,5 @@ colnames(predict) <- c("expression_subtype", colnames(predict)[-1])
 rf.pred <- predict(rf.reg, predict)
 
 # log.pred <- predict(log.reg, predict)
+
+rf.pred
