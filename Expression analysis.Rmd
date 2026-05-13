@@ -1,3 +1,11 @@
+
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(Rtsne)
+library(umap)
+load("LUAD_data.RData")
+
 #Step1 Data Exploration
 table(luad_anot_clean$paper_expression_subtype)
 table(luad_anot_clean$ajcc_pathologic_stage)
