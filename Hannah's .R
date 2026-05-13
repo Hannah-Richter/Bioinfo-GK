@@ -1,4 +1,3 @@
-```{r}
 library(dplyr)
 library(tidyverse)
 library(ggplot2)
@@ -161,4 +160,3 @@ umap_df_50 <- data.frame(
   UMAP50_2 = umap_50$layout[,2])
 ggplot(umap_df_50, aes(UMAP50_1, UMAP50_2)) +
   geom_point()
-```
