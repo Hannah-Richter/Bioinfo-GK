@@ -7,3 +7,149 @@ table_type <- table(substr(luad_anot_clean$barcode, 14, 15))
 names(table_type) <- c("Tumor (01)", "Normal (11)")
 table_type
 #there are only 44 normale tissue samples
+
+#Step 2 Dimensionality reduction
+luad_matrix <- luad_exp_clean %>%
+  select(-1) %>%
+  as.matrix()
+luad_matrix <- scale(luad_matrix)
+rownames(luad_matrix) <- luad_exp_clean[[1]]
+luad_matrix.tibble = as_tibble(luad_matrix)
+
+#calculate the variance for every gene and represent as a vector
+luad_matrix.var = luad_matrix.tibble %>%
+  rowwise() %>%
+  summarize(variance = var(c_across(where(is.numeric)), na.rm = TRUE)) %>%
+  pull(variance)
+
+#high Variance rows
+q75 <- quantile(luad_matrix.var, 0.75, na.rm = TRUE)
+highVarRows <- which(luad_matrix.var >= q75)
+
+#PCA
+pca = luad_matrix.tibble  %>%
+  slice(highVarRows) %>% 
+  t() %>% 
+  prcomp(center = FALSE, scale = FALSE) 
+
+#calculate variance for each component
+variance = (pca$sdev)^2
+prop.variance = variance/sum(variance)
+names(prop.variance) = 1:length(prop.variance)
+data.frame(proportion = prop.variance, 
+           PCs = as.numeric(names(prop.variance)))
+
+pca_with_annot <- as.data.frame(pca$x) %>%
+  tibble::rownames_to_column("barcode") %>%
+  merge(luad_anot_clean, by = "barcode")
+
+#we want to first see if the tumor samples are clustered together and away from the normal samples
+
+pca_with_annot <- pca_with_annot %>%
+  mutate(
+    sample_code = substr(barcode, 14, 15),
+    sample_type = case_when(
+      sample_code == "01" ~ "Tumor",
+      sample_code == "11" ~ "Normal",
+      TRUE ~ "Other"
+    )
+  )
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC2, colour = sample_type)) +
+  geom_point() +
+  scale_colour_manual(values = c("grey", "red"))
+
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC3, colour = sample_type)) +
+  geom_point() +
+  scale_colour_manual(values = c("grey", "red"))
+
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC2, colour = paper_expression_subtype)) +
+  geom_point() +
+  scale_colour_manual(values = c("yellow", "red","blue"))
+
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC3, colour = paper_expression_subtype)) +
+  geom_point() +
+  scale_colour_manual(values = c( "red","blue", "yellow"))
+
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC2, colour = paper_Smoking.Status)) +
+  geom_point() +
+  scale_colour_manual(values = c("grey", "red", "blue", "green", "yellow"))
+
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC3, colour = paper_Smoking.Status)) +
+  geom_point() +
+  scale_colour_manual(values = c("grey", "red", "blue", "green", "yellow"))
+
+#Rtsne t-distributed Stochastic Neighbor Embedding
+tsne_input <- luad_matrix.tibble %>%
+  slice(highVarRows) %>%
+  as.matrix() %>%
+  t()
+set.seed(123)
+sample_names <- rownames(tsne_input)
+
+tsne <- Rtsne(
+  tsne_input,
+  perplexity = 30,
+  check_duplicates = FALSE
+)
+
+tsne_df <- data.frame(
+  barcode=sample_names,
+  tSNE1 = tsne$Y[,1],
+  tSNE2 = tsne$Y[,2]
+)
+tsne_with_annot <- tsne_df %>%
+  left_join(luad_anot_clean, by = "barcode")%>%
+  mutate(
+    sample_code = substr(barcode, 14, 15),
+    sample_type = case_when(
+      sample_code == "01" ~ "Tumor",
+      sample_code == "11" ~ "Normal",
+      TRUE ~ "Other"
+    ))
+  
+ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=sample_type)) +
+  geom_point()
+
+#UMAP Uniform Manifold Approximation and Projection
+umap_input <- t(luad_matrix)
+luad.umap <- umap(umap_input)
+
+umap_df <- data.frame(
+  UMAP1 = luad.umap$layout[,1],
+  UMAP2 = luad.umap$layout[,2]
+)
+ggplot(umap_df, aes(UMAP1, UMAP2)) + geom_point()
+#UMAP on top PCs
+#top k PCs extrahieren
+pc_10 <- pca$x[, 1:10]
+pc_30 <- pca$x[, 1:30]
+pc_50 <- pca$x[, 1:50]
+
+umap_10 <- umap(pc_10)
+umap_df_10 <- data.frame(
+  UMAP1 = umap_10$layout[,1],
+  UMAP2 = umap_10$layout[,2])
+
+ggplot(umap_df_10, aes(UMAP1, UMAP2)) +
+  geom_point()
+
+umap_30 <- umap(pc_30)
+umap_df_30 <- data.frame(
+  UMAP30_1 = umap_30$layout[,1],
+  UMAP30_2 = umap_30$layout[,2])
+
+ggplot(umap_df_30, aes(UMAP30_1, UMAP30_2)) +
+  geom_point()
+
+umap_50 <- umap(pc_50)
+umap_df_50 <- data.frame(
+  UMAP50_1 = umap_50$layout[,1],
+  UMAP50_2 = umap_50$layout[,2])
+ggplot(umap_df_50, aes(UMAP50_1, UMAP50_2)) +
+  geom_point()
