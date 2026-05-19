@@ -14,7 +14,7 @@ library(tidyverse)
 library(dplyr)
 library(randomForest)
 library(ggplot2)
-library(glmnet)
+library(nnet)
 
 rm(list=ls())
 
@@ -66,17 +66,18 @@ annot <- annot[, c("barcode", grep("^paper_", colnames(annot), value = TRUE))]
 length(grep("paper", colnames(annot)))
 ```
 
-As this also makes the 'paper_' prefix superfluous we strip it from the paper columns. Furthermore, we noticed textual NAs, which were entered into the data set as '[unknown]', '[not available]' and '[Not Available]'. We thus strip these and replace them by real NAs. We perform the same operation on the expression data, whilst we're at it.
+As this also makes the 'paper_' prefix superfluous we strip it from the paper columns. Furthermore, we noticed textual NAs, which were entered into the data set as '[unknown]', '[not available]' and '[Not Available]'. We thus strip these and replace them by real NAs. We perform the same operation on the expression data, whilst we're at it. The paper_Tumor.stage column encodes the Ajcc pathological stage. Thus, we replaced it with the ajcc staging.
 
 ```{r, echo=F}
 colnames(annot) <- c(colnames(annot)[1], colnames(annot)[-1] %>% substring(7))
+annot$Tumor.stage <- luad_anot_clean$ajcc_pathologic_stage
 annot <- NA_flattener(annot)
 
 exp <- column_to_rownames(luad_exp_clean, "gene")
 exp <- NA_flattener(exp)
 ```
 
-When looking at the counts of NAs, the expression data are complete, whilst the annotation data have 5623 NAs in total distributed relatively evenly across all columns with barcode and patient being the exception.
+When looking at the counts of NAs, the expression data are complete, whilst the annotation data have 5623 NAs in total distributed relatively evenly across all columns with barcode, patient, and Tumor.stae being the exceptions.
 
 ```{r}
 NA_counter(exp)
@@ -88,7 +89,7 @@ From the head-call above, we know that all of the text columns are characters, e
 
 ```{r}
 for (i in colnames(annot)) {
-  if (length(unique(annot[,i])) <= 10) {print(i); annot[,i] <- annot[,i] %>% factor()}
+  if (length(unique(annot[,i])) <= 10) {annot[,i] <- annot[,i] %>% factor()}
 }
 ```
 
@@ -101,3 +102,96 @@ annot <- annot %>% mutate(is.tumour = substring(barcode, 14, 15)=="01")
 With our annotation data (and incidentally also expression data) cleaned up and somewhat useable, we move on to the next step.
 
 ## Exploration of Clinical Variables
+
+
+
+## Predictive Modelling
+
+Rf and binomial and multinomial regressions for target 'expresion_subtype'
+
+```{r}
+train.annot <- annot[!is.na(annot$expression_subtype),]
+train.exp <- exp[,match(train.annot$barcode, colnames(exp))]
+
+exp.var <- train.exp %>% apply(1, var)
+t50.train.exp.var <- t(train.exp[names(sort(exp.var)[1:50]),])
+train <- data.frame(factor(train.annot$expression_subtype), t50.train.exp.var)
+colnames(train) <- c("expression_subtype", colnames(train)[-1])
+
+rf.reg <- randomForest(expression_subtype ~ ., data = train, importance = TRUE, ntree = 500)
+mult.reg <- multinom(expression_subtype ~ ., data = train)
+
+prediction.annot <- annot[is.na(annot$expression_subtype),]
+prediction.exp <- exp[,match(prediction.annot$barcode, colnames(exp))]
+
+t50.predict.exp.var <- t(prediction.exp[names(sort(exp.var)[1:50]),])
+prediction <- data.frame(factor(prediction.annot$expression_subtype), t50.predict.exp.var)
+colnames(prediction) <- c("expression_subtype", colnames(prediction)[-1])
+
+rf.pred <- predict(rf.reg, prediction)
+mult.pred <- predict(mult.reg, prediction)
+
+ggplot() +
+  geom_bar(aes(x=rf.pred), color="black", fill="white") +
+  labs(title="Distribution in Random Forest Prediction") +
+  theme_bw()
+
+ggplot() +
+  geom_bar(aes(x=train$expression_subtype), color="black", fill="white") +
+  labs(title="Distribution in Training Data") +
+  theme_bw()
+
+ggplot() +
+  geom_bar(aes(x=mult.pred), color="black", fill="white") +
+  labs(title="Distribution in Multinomial Logistic Prediction") +
+  theme_bw()
+```
+
+Rf, multinomial regressions, and kNN-clustering for target 'ajcc_pathologic_stage' (Tumor Stage), random selection for training due to full data available
+
+```{r}
+selector <- sample(annot$barcode, nrow(annot)/2)
+anti.selector <- annot$barcode[!{annot$barcode %in% selector}]
+
+train.annot <- column_to_rownames(annot, "barcode")
+train.annot$Tumor.stage <- train.annot$Tumor.stage %>% sapply(function(x) {
+  if (x == "Stage IA" || x == "Stage IB" || x == "Stage IIA" || x == "Stage IIB") return("Early") else return("Late")
+}) %>% factor()
+prediction.annot <- train.annot
+train.annot <- train.annot[selector,]
+train.exp <- exp[,match(selector, colnames(exp))]
+
+exp.var <- train.exp %>% apply(1, var)
+t50.train.exp.var <- t(train.exp[names(sort(exp.var)[1:50]),])
+train <- data.frame(train.annot$Tumor.stage, t50.train.exp.var)
+colnames(train) <- c("Tumor.stage", colnames(train)[-1])
+
+rf.reg <- randomForest(Tumor.stage ~ ., data = train, importance = TRUE, ntree = 500)
+log.reg <- glm(Tumor.stage ~ ., data = train, family = "binomial")
+
+prediction.annot <- prediction.annot[anti.selector,]
+prediction.exp <- exp[,match(anti.selector, colnames(exp))]
+
+t50.predict.exp.var <- t(prediction.exp[names(sort(exp.var)[1:50]),])
+prediction <- data.frame(factor(prediction.annot$Tumor.stage), t50.predict.exp.var)
+colnames(prediction) <- c("Tumor.stage", colnames(prediction)[-1])
+
+rf.pred <- predict(rf.reg, prediction)
+log.pred <- factor(ifelse(predict(log.reg, prediction) > 0.5, "Late", "Early"))
+
+ggplot() +
+  geom_bar(aes(x=rf.pred), color="black", fill="white") +
+  labs(title="Distribution in Random Forest Prediction") +
+  theme_bw()
+
+ggplot() +
+  geom_bar(aes(x=log.pred), color="black", fill="white") +
+  labs(title="Distribution in Multinomial Logistic Prediction") +
+  theme_bw()
+
+ggplot() +
+  geom_bar(aes(x=train$Tumor.stage), color="black", fill="white") +
+  labs(title="Distribution in Training Data") +
+  theme_bw()
+```
+
