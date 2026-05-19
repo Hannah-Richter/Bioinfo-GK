@@ -13,8 +13,7 @@ ggplot(expression_data) +
   geom_qq( aes(sample = get(colnames(expression_data)[21]))) +
   geom_qq( aes(sample = get(colnames(expression_data)[85]))) +
   geom_qq( aes(sample = get(colnames(expression_data)[107]))) +
-  geom_qq( aes(sample = get(colnames(expression_data)[171]))) +
-  geom_qq( aes(sample = get(colnames(expression_data)[298])))
+  geom_qq( aes(sample = get(colnames(expression_data)[171])))
 
 
 #Transpose the dataset to allow for gene-wise qq-plots
@@ -24,8 +23,7 @@ ggplot(t_expression_data) +
   geom_qq(aes(sample = get(colnames(t_expression_data)[10])))+
   geom_qq(aes(sample = get(colnames(t_expression_data)[400])))+
   geom_qq(aes(sample = get(colnames(t_expression_data)[566])))+
-  geom_qq(aes(sample = get(colnames(t_expression_data)[1020])))+
-  geom_qq(aes(sample = get(colnames(t_expression_data)[2193])))
+  geom_qq(aes(sample = get(colnames(t_expression_data)[1020])))
 
 #Histograms of some genes
 ggplot(t_expression_data) +
@@ -36,12 +34,10 @@ ggplot(t_expression_data) +
   geom_histogram(aes(x = get(colnames(t_expression_data)[471])))
 ggplot(t_expression_data) +
   geom_histogram(aes(x = get(colnames(t_expression_data)[1132])))
-ggplot(t_expression_data) +
-  geom_histogram(aes(x = get(colnames(t_expression_data)[2378])))
 
 
 #Shapiro-Wilks test of all genes separately
-norm_test = expression_data[,seq(2,length(expression_data[1,]))] %>% apply(MARGIN =1, function(x) shapiro.test(x))
+norm_test = expression_data[-1] %>% apply(MARGIN = 1, function(x) shapiro.test(x))
 
 #Extract p-values from "Shapiro Test" Object and add to list; plot into histogram
 Shapiro_p_values = list()
@@ -52,22 +48,33 @@ Shapiro_p_values %>% unlist(use.names = FALSE) %>% hist(,breaks=20)
 #Percentage of Shapiro-Wilk Tests whith p smaller 0.05
 sum(Shapiro_p_values < 0.05)/length(Shapiro_p_values)
 
+#Quantile Normalisation
 
-rnk <- apply(expression_data[-1], 2, rank, ties.method = "min")
-view(rnk)
+#Compute ranks of genes for each patient
+ranks <- apply(expression_data[-1], 2, rank, ties.method = "min")
 
+#Sort logCPM values of each patients and calculate average 
 sorted_expression = apply(expression_data[-1],2,sort)
-view(sorted_expression)
+#Calculate Row Averages
 ranked_means <- rowMeans(sorted_expression)
-view(ranked_means)
+#Replace Ranks of genes with the values of the means of ranks
+norm_expression = as.data.frame(matrix(ranked_means[ranks], ncol=ncol(ranks)))
+#Add row- and colnames
+rownames(norm_expression) = expression_data[[1]]
+colnames(norm_expression) = colnames(expression_data[-1])
 
-norm_expression = as.data.frame(matrix(ranked_means[rnk], ncol=ncol(rnk)))
-view(norm_expression)
+#Compare Shapiro-Wilks test
+norm_test_normalised = norm_expression %>% apply(MARGIN = 1, function(x) shapiro.test(x))
+Shapiro_p_values_normalised = list()
+for(i in 1:length(norm_test_normalised)) Shapiro_p_values_normalised[i]= norm_test_normalised[[i]]$p.value
+Shapiro_p_values_normalised %>% unlist(use.names = FALSE) %>% hist(,breaks=20)
+sum(Shapiro_p_values_normalised < 0.05)/length(Shapiro_p_values_normalised)
+#Less normally distributed than before
 
-ggplot(norm_expression) +
-  geom_qq( aes(sample = get(colnames(norm_expression)[2])))
 
-t_norm_exp = t(norm_expression) %>% data.frame()
+#Differential Gene Expression
 
-ggplot(t_norm_exp) +
-  geom_qq( aes(sample = get(colnames(t_norm_exp)[2])))
+
+
+
+
