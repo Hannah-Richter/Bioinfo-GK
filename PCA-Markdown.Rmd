@@ -1,0 +1,210 @@
+---
+title: "PCA_Luad"
+output: html_document
+date: "2026-05-12"
+---
+
+```{r setup}
+library(dplyr)
+library(tidyverse)
+library(Rtsne)
+library(umap)
+load("/Users/USER/Downloads/LUAD_data.RData")
+```
+
+## R Markdown
+The expression data is first presented in a matrix in which the rows are named after the genes.
+
+```{r matrix}
+luad_matrix <- luad_exp_clean %>%
+  select(-1) %>%
+  as.matrix()
+luad_matrix <- scale(luad_matrix)
+rownames(luad_matrix) <- luad_exp_clean[[1]]
+luad_matrix.tibble = as_tibble(luad_matrix)
+```
+
+The variance is calculated for each gene and represented as a vector.
+
+```{r Varianz}
+luad_matrix.var = luad_matrix.tibble %>%
+  rowwise() %>%
+  summarize(variance = var(c_across(where(is.numeric)), na.rm = TRUE)) %>%
+  pull(variance)
+```
+
+```{r Quantile}
+q75 <- quantile(luad_matrix.var, 0.75, na.rm = TRUE)
+
+highVarRows <- which(luad_matrix.var >= q75)
+```
+
+We can now perform a principle component analysis. We need to transpose the data, because the PCA function is expecting genes as columns and samples as rows. we only choose the genes with high Variance.
+
+```{r PCA}
+pca = luad_matrix.tibble  %>%
+  slice(highVarRows)%>%
+  t() %>% 
+  prcomp(center = FALSE, scale = FALSE) 
+```
+We calculate the variance of each principal component and the proportion of the overall variance that the components are explaining.
+```{r variance of components}
+variance = (pca$sdev)^2
+prop.variance = variance/sum(variance)
+names(prop.variance) = 1:length(prop.variance)
+data.frame(proportion = prop.variance, 
+           PCs = as.numeric(names(prop.variance)))
+
+pca_with_annot <- as.data.frame(pca$x) %>%
+  tibble::rownames_to_column("barcode") %>%
+  merge(luad_anot_clean, by = "barcode")
+```
+First we want to see if the tumor samples are clustered together and away from the normal tissue samples.
+```{r differentiate tumor and normal samples}
+pca_with_annot <- pca_with_annot %>%
+  mutate(
+    sample_code = substr(barcode, 14, 15),
+    sample_type = case_when(
+      sample_code == "01" ~ "Tumor",
+      sample_code == "11" ~ "Normal",
+      TRUE ~ "Other" ))
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC2, colour = sample_type)) +
+  geom_point() +
+  scale_colour_manual(values = c("blue", "red"))
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC3, colour = sample_type)) +
+  geom_point() +
+  scale_colour_manual(values = c("blue", "red"))
+```
+
+```{r }
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC2, colour = paper_expression_subtype)) +
+  geom_point() +
+  scale_colour_manual(values = c("yellow", "red","blue"))
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC3, colour = paper_expression_subtype)) +
+  geom_point() +
+  scale_colour_manual(values = c( "red","blue", "yellow"))
+```
+```{r }
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC2, colour = paper_Smoking.Status)) +
+  geom_point() +
+  scale_colour_manual(values = c("yellow", "red","blue", "green", "grey"))
+ggplot(pca_with_annot,
+       aes(x = PC1, y = PC3, colour = paper_Smoking.Status)) +
+  geom_point() +
+  scale_colour_manual(values = c( "red","blue", "yellow", "green", "grey"))
+```
+
+Rtsne t-distributed Stochastic Neighbor Embedding
+```{r Rtsne}
+tsne_input <- luad_matrix.tibble %>%
+  slice(highVarRows) %>%
+  as.matrix() %>%
+  t()
+set.seed(123)
+sample_names <- rownames(tsne_input)
+
+tsne <- Rtsne(
+  tsne_input,
+  perplexity = 30,
+  check_duplicates = FALSE
+)
+
+tsne_df <- data.frame(
+  barcode=sample_names,
+  tSNE1 = tsne$Y[,1],
+  tSNE2 = tsne$Y[,2]
+)
+tsne_with_annot <- tsne_df %>%
+  left_join(luad_anot_clean, by = "barcode")%>%
+  mutate(
+    sample_code = substr(barcode, 14, 15),
+    sample_type = case_when(
+      sample_code == "01" ~ "Tumor",
+      sample_code == "11" ~ "Normal",
+      TRUE ~ "Other"
+    ))
+  
+ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=sample_type)) +
+  geom_point()
+```
+
+UMAP Uniform Manifold Approximation and Projection
+
+```{r UMAP} 
+umap_input <- t(luad_matrix)
+luad.umap <- umap(umap_input)
+samples <- rownames(umap_input)
+
+umap_df <- data.frame(
+  barcode=samples,
+  UMAP1 = luad.umap$layout[,1],
+  UMAP2 = luad.umap$layout[,2]
+)
+
+umap_with_annot <- umap_df %>%
+  left_join(luad_anot_clean, by = "barcode")%>%
+  mutate(
+    sample_code = substr(barcode, 14, 15),
+    sample_type = case_when(
+      sample_code == "01" ~ "Tumor",
+      sample_code == "11" ~ "Normal",
+      TRUE ~ "Other"
+    ))
+ggplot(umap_with_annot, aes(UMAP1, UMAP2, colour=sample_type)) + geom_point()
+```
+#UMAP on top PCs
+#top k PCs extrahieren
+```{r UMAPtopPCs}
+pca_umap = luad_matrix.tibble  %>%
+  t() %>% 
+  prcomp(center = FALSE, scale = FALSE) 
+
+pc_10 <- pca_umap$x[, 1:10]
+pc_30 <- pca_umap$x[, 1:30]
+pc_50 <- pca_umap$x[, 1:50]
+
+umap_10 <- umap(pc_10)
+
+umap_df_10 <- data.frame(
+  barcode=rownames(pc_10),
+  UMAP1 = umap_10$layout[,1],
+  UMAP2 = umap_10$layout[,2])
+
+umap10_with_annot <- umap_df_10 %>%
+  left_join(luad_anot_clean, by = "barcode")
+
+ggplot(umap10_with_annot, aes(UMAP1, UMAP2, colour=paper_expression_subtype)) +
+  geom_point()
+
+umap_30 <- umap(pc_30)
+
+umap_df_30 <- data.frame(
+  barcode=rownames(pc_30),
+  UMAP30_1 = umap_30$layout[,1],
+  UMAP30_2 = umap_30$layout[,2])
+
+umap30_with_annot <- umap_df_30 %>%
+  left_join(luad_anot_clean, by = "barcode")
+
+ggplot(umap30_with_annot, aes(UMAP30_1, UMAP30_2, colour=paper_expression_subtype)) +
+  geom_point()
+
+umap_50 <- umap(pc_50)
+
+umap_df_50 <- data.frame(
+  barcode=rownames(pc_50),
+  UMAP50_1 = umap_50$layout[,1],
+  UMAP50_2 = umap_50$layout[,2])
+
+umap50_with_annot <- umap_df_50 %>%
+  left_join(luad_anot_clean, by = "barcode")
+
+ggplot(umap50_with_annot, aes(UMAP50_1, UMAP50_2, colour=paper_expression_subtype)) +
+  geom_point()
+```
+With only the 10 top PCs the clusters are more clearly clustered together. More PCs bring more noise to the UMAP plot. 
