@@ -1,0 +1,103 @@
+---
+title: "Annotation Cleaning, Clinical Variable Exploration, and Predictive Modelling"
+author: "Merlin"
+date: "2026-05-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=F}
+library(tidyverse)
+library(dplyr)
+library(randomForest)
+library(ggplot2)
+library(glmnet)
+
+rm(list=ls())
+
+load("LUAD_data.RData")
+
+NA_flattener <- function(data) {
+  as.data.frame(apply(data, 2, function(x) {
+    x[which(x=="[unknown]" | x=="[not available]" | x=="[Not Available]")] <- NA
+    return(x)
+  }))
+}
+
+NA_counter <- function(data, per_col=F) {
+  s <- apply(data, 2, function(k) sum(is.na(k)))
+  if (per_col) return(s) else return (sum(s))
+}
+
+level_counter <- function (data) {
+  return(sapply(levels(data), function(x) sum(data==x)))
+}
+
+in_out_transformer <- function (vector, inner) {
+  if ((!inner %in% unique(vector))) stop("There's no position in your vector equivalent to the inner you provided.")
+  return (factor(sapply(vector, function(x) {
+    if (x == inner) return(inner) else return (paste0("not.", inner))
+  })))
+}
+```
+
+## Annotation Cleaning
+
+First we want to clean up our annotation file. To do this we must first take a look at the file.
+
+```{r}
+annot <- luad_anot_clean
+head(annot)
+```
+
+We can see here, that there are indeed values missing in a lot of the columns. Looking at the documentation for the data source ({{SOURCE}}), we can also see, that the first three segments = or the first 12 digits = of the barcode encode the patient ID. We thus replace paper_patient with the barcode trimmed to position 12.
+
+```{r, echo=F}
+annot$paper_patient <- strtrim(annot$barcode, 12)
+```
+
+Since we only want the barcode and paper columns, we discard anything not matching to that selection. This leaves us with 20 paper columns.
+
+```{r}
+annot <- annot[, c("barcode", grep("^paper_", colnames(annot), value = TRUE))]
+length(grep("paper", colnames(annot)))
+```
+
+As this also makes the 'paper_' prefix superfluous we strip it from the paper columns. Furthermore, we noticed textual NAs, which were entered into the data set as '[unknown]', '[not available]' and '[Not Available]'. We thus strip these and replace them by real NAs. We perform the same operation on the expression data, whilst we're at it.
+
+```{r, echo=F}
+colnames(annot) <- c(colnames(annot)[1], colnames(annot)[-1] %>% substring(7))
+annot <- NA_flattener(annot)
+
+exp <- column_to_rownames(luad_exp_clean, "gene")
+exp <- NA_flattener(exp)
+```
+
+When looking at the counts of NAs, the expression data are complete, whilst the annotation data have 5623 NAs in total distributed relatively evenly across all columns with barcode and patient being the exception.
+
+```{r}
+NA_counter(exp)
+NA_counter(annot)
+NA_counter(annot, T)
+```
+
+From the head-call above, we know that all of the text columns are characters, even when a factor would be the more appropriate data type. We thus go through the cleaned annotation table and factorise, where appropriate.
+
+```{r}
+for (i in colnames(annot)) {
+  if (length(unique(annot[,i])) <= 10) {print(i); annot[,i] <- annot[,i] %>% factor()}
+}
+```
+
+We know from the documentation of the data ({{SOURCE}}), that the leading numbers of the fourth segment tell us whether the sample is a tumour or not. We use this to encode a new column entitled 'is.tumour' storing that information. Since this segment only has the values of '01' and '11', and since '11' codes for healthy tissue and '01' for tumour tissue, a boolean suffices.
+
+```{r}
+annot <- annot %>% mutate(is.tumour = substring(barcode, 14, 15)=="01") 
+```
+
+With our annotation data (and incidentally also expression data) cleaned up and somewhat useable, we move on to the next step.
+
+## Exploration of Clinical Variables
