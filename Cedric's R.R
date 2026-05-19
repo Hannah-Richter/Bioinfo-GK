@@ -74,7 +74,16 @@ sum(Shapiro_p_values_normalised < 0.05)/length(Shapiro_p_values_normalised)
 
 #Differential Gene Expression
 
+#Which Samples have which subtype?
+Prox_inflam = which(luad_anot_clean$paper_expression_subtype=="prox.-inflam")
+Prox_prolif = which(luad_anot_clean$paper_expression_subtype=="prox.-prolif.")
+Terminal_resp = which(luad_anot_clean$paper_expression_subtype=="TRU")
 
 
+Exp_inflam = expression_data[Prox_inflam+1]
+Exp_prolif = expression_data[Prox_prolif+1]
+Exp_term = expression_data[Terminal_resp+1]
+
+# 
 
 
