@@ -39,7 +39,7 @@ q75 <- quantile(luad_matrix.var, 0.75, na.rm = TRUE)
 highVarRows <- which(luad_matrix.var >= q75)
 ```
 
-We can now perform a principle component analysis. We need to transpose the data, because the PCA function is expecting genes as columns and samples as rows. and we only choose the genes with high Variance.
+We can now perform a principle component analysis. We need to transpose the data, because the PCA function is expecting genes as columns and samples as rows. we only choose the genes with high Variance.
 
 ```{r PCA}
 pca = luad_matrix.tibble  %>%
