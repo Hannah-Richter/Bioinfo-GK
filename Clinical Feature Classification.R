@@ -18,8 +18,14 @@ luad_anot_clean_num$paper_Smoking.Status <- factor(luad_anot_clean_num$paper_Smo
 luad_anot_clean_num$ajcc_pathologic_stage <- factor(luad_anot_clean_num$ajcc_pathologic_stage)
 str(luad_anot_clean_num)
 
+#divide in train and test data 70/30
+set.seed(123)
+train_d <- createDataPartition(luad_anot_clean_num$paper_expression_subtype, p = 0.7, list = FALSE) 
+train_data <- luad_anot_clean_num[train_d, ]
+test_data <- luad_anot_clean_num[-train_d, ]
+
 #calculate a multinomal logistic regression (was too complex with all features so I chose 3: Sex, Tumor.stage, Smoking.status)
-model_logreg <- multinom(paper_expression_subtype ~ paper_Sex + paper_Tumor.stage + paper_Smoking.Status, data = luad_anot_clean_num)
+model_logreg <- multinom(paper_expression_subtype ~ paper_Sex + paper_Tumor.stage + paper_Smoking.Status, data = train_data)
 summary(model_logreg)
 #choose different features
 model_logreg <- multinom(paper_expression_subtype ~ paper_Sex + paper_Age.at.diagnosis + paper_Smoking.Status, data = luad_anot_clean_num)
