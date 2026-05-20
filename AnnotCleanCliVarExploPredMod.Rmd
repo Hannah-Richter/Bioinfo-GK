@@ -158,8 +158,12 @@ train.annot$Tumor.stage <- train.annot$Tumor.stage %>% sapply(function(x) {
   if (x == "Stage IA" || x == "Stage IB" || x == "Stage IIA" || x == "Stage IIB") return("Early") else return("Late")
 }) %>% factor()
 prediction.annot <- train.annot
+
 train.annot <- train.annot[selector,]
 train.exp <- exp[,match(selector, colnames(exp))]
+
+prediction.annot <- prediction.annot[anti.selector,]
+prediction.exp <- exp[,match(anti.selector, colnames(exp))]
 
 exp.var <- train.exp %>% apply(1, var)
 t50.train.exp.var <- t(train.exp[names(sort(exp.var)[1:50]),])
@@ -168,9 +172,6 @@ colnames(train) <- c("Tumor.stage", colnames(train)[-1])
 
 rf.reg <- randomForest(Tumor.stage ~ ., data = train, importance = TRUE, ntree = 500)
 log.reg <- glm(Tumor.stage ~ ., data = train, family = "binomial")
-
-prediction.annot <- prediction.annot[anti.selector,]
-prediction.exp <- exp[,match(anti.selector, colnames(exp))]
 
 t50.predict.exp.var <- t(prediction.exp[names(sort(exp.var)[1:50]),])
 prediction <- data.frame(factor(prediction.annot$Tumor.stage), t50.predict.exp.var)
