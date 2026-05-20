@@ -85,5 +85,8 @@ Exp_prolif = expression_data[Prox_prolif+1]
 Exp_term = expression_data[Terminal_resp+1]
 
 # 
+sum(!is.na(luad_anot_clean$paper_expression_subtype))
+sum(substr(luad_anot_clean$barcode, 14, 15)=="01"&!is.na(luad_anot_clean$paper_expression_subtype))
+
 
 
