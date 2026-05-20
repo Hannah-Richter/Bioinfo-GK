@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = F)
 ```
 
 ```{r, echo=F}
@@ -48,7 +48,7 @@ in_out_transformer <- function (vector, inner) {
 
 First we want to clean up our annotation file. To do this we must first take a look at the file.
 
-```{r}
+```{r, echo=T}
 annot <- luad_anot_clean
 head(annot)
 ```
@@ -96,7 +96,7 @@ for (i in colnames(annot)) {
 We know from the documentation of the data ({{SOURCE}}), that the leading numbers of the fourth segment tell us whether the sample is a tumour or not. We use this to encode a new column entitled 'is.tumour' storing that information. Since this segment only has the values of '01' and '11', and since '11' codes for healthy tissue and '01' for tumour tissue, a boolean suffices.
 
 ```{r}
-annot <- annot %>% mutate(is.tumour = substring(barcode, 14, 15)=="01") 
+annot <- annot %>% mutate(is.tumour = substring(barcode, 14, 15)=="01")
 ```
 
 With our annotation data (and incidentally also expression data) cleaned up and somewhat useable, we move on to the next step.
@@ -107,14 +107,14 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 
 ## Predictive Modelling
 
-Rf and binomial and multinomial regressions for target 'expresion_subtype'
+Rf and multinomial regressions for target 'expresion_subtype'
 
 ```{r}
 train.annot <- annot[!is.na(annot$expression_subtype),]
 train.exp <- exp[,match(train.annot$barcode, colnames(exp))]
 
 exp.var <- train.exp %>% apply(1, var)
-t50.train.exp.var <- t(train.exp[names(sort(exp.var)[1:50]),])
+t50.train.exp.var <- t(train.exp[names(sort(exp.var, decreasing = T)[1:50]),])
 train <- data.frame(factor(train.annot$expression_subtype), t50.train.exp.var)
 colnames(train) <- c("expression_subtype", colnames(train)[-1])
 
@@ -124,7 +124,7 @@ mult.reg <- multinom(expression_subtype ~ ., data = train)
 prediction.annot <- annot[is.na(annot$expression_subtype),]
 prediction.exp <- exp[,match(prediction.annot$barcode, colnames(exp))]
 
-t50.predict.exp.var <- t(prediction.exp[names(sort(exp.var)[1:50]),])
+t50.predict.exp.var <- t(prediction.exp[names(sort(exp.var, decreasing = T)[1:50]),])
 prediction <- data.frame(factor(prediction.annot$expression_subtype), t50.predict.exp.var)
 colnames(prediction) <- c("expression_subtype", colnames(prediction)[-1])
 
@@ -166,14 +166,14 @@ prediction.annot <- prediction.annot[anti.selector,]
 prediction.exp <- exp[,match(anti.selector, colnames(exp))]
 
 exp.var <- train.exp %>% apply(1, var)
-t50.train.exp.var <- t(train.exp[names(sort(exp.var)[1:50]),])
+t50.train.exp.var <- t(train.exp[names(sort(exp.var, decreasing = T)[1:50]),])
 train <- data.frame(train.annot$Tumor.stage, t50.train.exp.var)
 colnames(train) <- c("Tumor.stage", colnames(train)[-1])
 
 rf.reg <- randomForest(Tumor.stage ~ ., data = train, importance = TRUE, ntree = 500)
 log.reg <- glm(Tumor.stage ~ ., data = train, family = "binomial")
 
-t50.predict.exp.var <- t(prediction.exp[names(sort(exp.var)[1:50]),])
+t50.predict.exp.var <- t(prediction.exp[names(sort(exp.var, decreasing = T)[1:50]),])
 prediction <- data.frame(factor(prediction.annot$Tumor.stage), t50.predict.exp.var)
 colnames(prediction) <- c("Tumor.stage", colnames(prediction)[-1])
 
@@ -194,5 +194,7 @@ ggplot() +
   geom_bar(aes(x=train$Tumor.stage), color="black", fill="white") +
   labs(title="Distribution in Training Data") +
   theme_bw()
+
+
 ```
 
