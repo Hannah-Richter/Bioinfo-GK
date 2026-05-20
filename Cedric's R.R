@@ -89,5 +89,3 @@ sum(!is.na(luad_anot_clean$paper_expression_subtype))
 sum(substr(luad_anot_clean$barcode, 14, 15)=="01"&!is.na(luad_anot_clean$paper_expression_subtype))
 
 
-
-frv vf
