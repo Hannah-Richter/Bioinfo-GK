@@ -2,6 +2,7 @@ library(tidyverse)
 library(dplyr)
 library(ggplot2)
 
+
 load("LUAD_data.RData")
 
 expression_data = luad_exp_clean
@@ -80,12 +81,27 @@ Prox_prolif = which(luad_anot_clean$paper_expression_subtype=="prox.-prolif.")
 Terminal_resp = which(luad_anot_clean$paper_expression_subtype=="TRU")
 
 
-Exp_inflam = expression_data[Prox_inflam+1]
-Exp_prolif = expression_data[Prox_prolif+1]
-Exp_term = expression_data[Terminal_resp+1]
+Exp_inflam = expression_data[Prox_inflam+1] %>% as.data.frame()
+Exp_prolif = expression_data[Prox_prolif+1] %>% as.data.frame()
+Exp_term = expression_data[Terminal_resp+1] %>% as.data.frame()
 
-# 
-sum(!is.na(luad_anot_clean$paper_expression_subtype))
-sum(substr(luad_anot_clean$barcode, 14, 15)=="01"&!is.na(luad_anot_clean$paper_expression_subtype))
+#Number of normal samples with subtype annotations
+sum(substr(luad_anot_clean$barcode, 14, 15)=="11"&!is.na(luad_anot_clean$paper_expression_subtype))
+#None of the subtype-annotated samples are normal samples -> we can utilise all subtype-annotated samples for our DGE analysis
+
+#DGE for one gene and one subtype as proof of concept
 
 
+
+p_values_1 = list()
+for (i in seq(1:dim(Exp_inflam)[1])) {
+  wilcox.test(x=unname(unlist(Exp_inflam[i,])),y = unname(unlist(cbind(Exp_prolif,Exp_term)[i,])),alternative ="two.sided")$p.value %>% append(p_values_1,.)
+}
+
+
+
+Exp_inflam[1,] %>% unlist() %>% unname() %>% wilcox.test(y = unname(unlist(cbind(Exp_prolif,Exp_term)[1,])),alternative ="two.sided") %>% .$p.value
+
+dim(Exp_inflam)[1]
+
+#Run across all subtypes and genes
