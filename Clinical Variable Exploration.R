@@ -5,7 +5,7 @@ library(ggplot2)
 
 load("/Users/USER/Downloads/LUAD_data.RData")
 
-}
+
 table(luad_anot_clean$ajcc_pathologic_stage)
 ggplot(luad_anot_clean, aes(x=ajcc_pathologic_stage)) + geom_bar() +labs (title="Distribution of pathologic stage", x="pathologic stage", y="frequency")
 
