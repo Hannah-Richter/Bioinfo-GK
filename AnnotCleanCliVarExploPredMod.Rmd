@@ -15,33 +15,14 @@ library(dplyr)
 library(randomForest)
 library(ggplot2)
 library(nnet)
+library(caret)
+library(pROC)
+
+set.seed(3259) # primes are beautiful
 
 rm(list=ls())
 
 load("LUAD_data.RData")
-
-NA_flattener <- function(data) {
-  as.data.frame(apply(data, 2, function(x) {
-    x[which(x=="[unknown]" | x=="[not available]" | x=="[Not Available]")] <- NA
-    return(x)
-  }))
-}
-
-NA_counter <- function(data, per_col=F) {
-  s <- apply(data, 2, function(k) sum(is.na(k)))
-  if (per_col) return(s) else return (sum(s))
-}
-
-level_counter <- function (data) {
-  return(sapply(levels(data), function(x) sum(data==x)))
-}
-
-in_out_transformer <- function (vector, inner) {
-  if ((!inner %in% unique(vector))) stop("There's no position in your vector equivalent to the inner you provided.")
-  return (factor(sapply(vector, function(x) {
-    if (x == inner) return(inner) else return (paste0("not.", inner))
-  })))
-}
 ```
 
 ## Annotation Cleaning
@@ -69,15 +50,33 @@ length(grep("paper", colnames(annot)))
 As this also makes the 'paper_' prefix superfluous we strip it from the paper columns. Furthermore, we noticed textual NAs, which were entered into the data set as '[unknown]', '[not available]' and '[Not Available]'. We thus strip these and replace them by real NAs. We perform the same operation on the expression data, whilst we're at it. The paper_Tumor.stage column encodes the Ajcc pathological stage. Thus, we replaced it with the ajcc staging.
 
 ```{r, echo=F}
+NA_flattener <- function(data) {
+  for (i in seq_along(data)) {
+    data[tolower(data[[i]]) %in% c("[unknown]","[not available]"), i ] <- NA
+  }
+  data
+}
+
+NA_counter <- function(data, per_col=F) {
+  s <- apply(data, 2, function(k) sum(is.na(k)))
+  if (per_col) return(s) else return (sum(s))
+}
+
 colnames(annot) <- c(colnames(annot)[1], colnames(annot)[-1] %>% substring(7))
 annot$Tumor.stage <- luad_anot_clean$ajcc_pathologic_stage
 annot <- NA_flattener(annot)
+annot %>% NA_counter(per_col=T) # No NAs in barcode
+length(annot$barcode) == length(unique(annot$barcode)) # barcodes can function as unique keys 
+annot <- column_to_rownames(annot, "barcode") # Don't like tibbles and their zero-name convention nonsense
 
-exp <- column_to_rownames(luad_exp_clean, "gene")
+exp <- luad_exp_clean
 exp <- NA_flattener(exp)
+exp %>% NA_counter() # No NAs in whole data set
+length(exp$gene) == length(unique(exp$gene)) # genes can functions as unique keys
+exp <- column_to_rownames(exp, "gene")
 ```
 
-When looking at the counts of NAs, the expression data are complete, whilst the annotation data have 5623 NAs in total distributed relatively evenly across all columns with barcode, patient, and Tumor.stae being the exceptions.
+When looking at the counts of NAs, the expression data are complete, whilst the annotation data have 5623 NAs in total distributed relatively evenly across all columns, with patient and Tumor.stage being the exceptions.
 
 ```{r}
 NA_counter(exp)
@@ -96,40 +95,74 @@ for (i in colnames(annot)) {
 We know from the documentation of the data ({{SOURCE}}), that the leading numbers of the fourth segment tell us whether the sample is a tumour or not. We use this to encode a new column entitled 'is.tumour' storing that information. Since this segment only has the values of '01' and '11', and since '11' codes for healthy tissue and '01' for tumour tissue, a boolean suffices.
 
 ```{r}
-annot <- annot %>% mutate(is.tumour = substring(barcode, 14, 15)=="01")
+annot <- annot %>% mutate(is.tumour = substring(rownames(annot), 14, 15)=="01")
 ```
 
-With our annotation data (and incidentally also expression data) cleaned up and somewhat useable, we move on to the next step.
-
-## Exploration of Clinical Variables
-
-
+With our annotation data (and incidentally also expression data) cleaned up and somewhat usable, we move on to the next step.
 
 ## Predictive Modelling
 
-Rf and multinomial regressions for target 'expresion_subtype'
+Rf and multinomial regressions for target 'expression_subtype'
 
 ```{r}
-train.annot <- annot[!is.na(annot$expression_subtype),]
-train.exp <- exp[,match(train.annot$barcode, colnames(exp))]
+data_splitter <- function(data, target, method="single", split=0.7, include.healthy=F, top.var.cutoff=50, annot.cols=21) {
+  if (method=="single") {
+    if (!include.healthy) data <- data[data$is.tumour,]
+    data <- data[!is.na(data[,target]),]
+    data.dat <- data[,{annot.cols+1}:ncol(data)]
+    top.var <- cbind(data[,target], data.dat[,names(sort(apply(data.dat, 2, var), decreasing=T)[1:top.var.cutoff])])
+    colnames(top.var)[1] <- target
+    selector <- sample(rownames(top.var), floor(nrow(top.var)*split))
+    anti.selector <- rownames(top.var)[!{rownames(top.var) %in% selector}]
+    training <- top.var[selector,]; testing <- top.var[anti.selector,]
+    return(list(training,testing))
+  } else if (strsplit(method,"-")[1]=="CV") {
+    tryCatch(x_vals <- strsplit(method, "-")[2] %>% as.numeric(), stop("For multiple crossvalidation method, use 'CV-[number of cross validations]."))
+    
+  } else stop("Method needs to be 'single' or 'CV-[number of cross validations].")
+}
 
-exp.var <- train.exp %>% apply(1, var)
-t50.train.exp.var <- t(train.exp[names(sort(exp.var, decreasing = T)[1:50]),])
-train <- data.frame(factor(train.annot$expression_subtype), t50.train.exp.var)
-colnames(train) <- c("expression_subtype", colnames(train)[-1])
+target_dualler <- function(data, target, first.group, boolean) {
+  x <- data[[target]]
+  first <- tolower(x) %in% tolower(first.group)
+  data[,target] <- ifelse(first, boolean[1], boolean[2]) %>% factor()
+  data
+}
 
-rf.reg <- randomForest(expression_subtype ~ ., data = train, importance = TRUE, ntree = 500)
-mult.reg <- multinom(expression_subtype ~ ., data = train)
+abs_imper <- function(data, mode) {
+  if (mode=="rf") {
+    abs.imp <- c()
+    imp.mat <- data[["importance"]]
+    for (i in seq_len(nrow(imp.mat))) {
+      abs.imp <- {abs(imp.mat[i, 2]-imp.mat[i, 1])} %>% {append(abs.imp, .)}
+    }
+    names(abs.imp) <- rownames(imp.mat)
+    return(abs.imp)
+  } else if (mode=="mult") {
+    abs.imp <- c()
+    imp.mat <- data %>% coef()
+    for (i in seq_len(ncol(imp.mat))) {
+      x <- sqrt(imp.mat[1, i]^2+imp.mat[2, i]^2)
+      abs.imp <- append(abs.imp, x)
+    }
+    names(abs.imp) <- colnames(imp.mat)
+    return(abs.imp)
+  }
+}
 
-prediction.annot <- annot[is.na(annot$expression_subtype),]
-prediction.exp <- exp[,match(prediction.annot$barcode, colnames(exp))]
+data <- cbind(annot, t(exp))
 
-t50.predict.exp.var <- t(prediction.exp[names(sort(exp.var, decreasing = T)[1:50]),])
-prediction <- data.frame(factor(prediction.annot$expression_subtype), t50.predict.exp.var)
-colnames(prediction) <- c("expression_subtype", colnames(prediction)[-1])
+data <- data_splitter(data, "expression_subtype")
+training <- data[[1]]; testing <- data[[2]]
 
-rf.pred <- predict(rf.reg, prediction)
-mult.pred <- predict(mult.reg, prediction)
+rf.reg <- randomForest(expression_subtype ~ ., data = training, importance = TRUE, ntree = 500)
+rf.reg.abs.imp <- abs_imper(rf.reg, mode="rf")
+
+mult.reg <- multinom(expression_subtype ~ ., data = training)
+mult.reg.abs.imp <- abs_imper(mult.reg, mode="mult")
+
+rf.pred <- predict(rf.reg, testing[,-1])
+mult.pred <- predict(mult.reg, testing[,-1])
 
 ggplot() +
   geom_bar(aes(x=rf.pred), color="black", fill="white") +
@@ -137,48 +170,55 @@ ggplot() +
   theme_bw()
 
 ggplot() +
-  geom_bar(aes(x=train$expression_subtype), color="black", fill="white") +
-  labs(title="Distribution in Training Data") +
-  theme_bw()
-
-ggplot() +
   geom_bar(aes(x=mult.pred), color="black", fill="white") +
   labs(title="Distribution in Multinomial Logistic Prediction") +
   theme_bw()
+
+ggplot() +
+  geom_bar(aes(x=testing$expression_subtype), color="black", fill="white") +
+  labs(title="Distribution in Testing Data") +
+  theme_bw()
 ```
+
+Confusion matrices
+
+```{r}
+for (i in c("rf.pred","mult.pred")) {
+  confusionMatrix(get(i), testing$expression_subtype) %>% show()
+}
+```
+
+AUC-ROC
+
+```{r}
+rf.reg.auc <- multiclass.roc(response = testing[,1], predictor = predict(rf.reg, testing, type = "prob"))$auc
+mult.reg.auc <- multiclass.roc(response = testing[,1], predictor = predict(mult.reg, testing, type = "prob"))$auc
+```
+
+
 
 Rf, multinomial regressions, and kNN-clustering for target 'ajcc_pathologic_stage' (Tumor Stage), random selection for training due to full data available
 
 ```{r}
-selector <- sample(annot$barcode, nrow(annot)/2)
-anti.selector <- annot$barcode[!{annot$barcode %in% selector}]
+data <- cbind(annot, t(exp))
 
-train.annot <- column_to_rownames(annot, "barcode")
-train.annot$Tumor.stage <- train.annot$Tumor.stage %>% sapply(function(x) {
-  if (x == "Stage IA" || x == "Stage IB" || x == "Stage IIA" || x == "Stage IIB") return("Early") else return("Late")
-}) %>% factor()
-prediction.annot <- train.annot
+data <- data_splitter(data, "Tumor.stage", top.var.cutoff = 50)
+training <- data[[1]]; testing <- data[[2]]
 
-train.annot <- train.annot[selector,]
-train.exp <- exp[,match(selector, colnames(exp))]
+training <- target_dualler(training, "Tumor.stage", first.group=c("Stage IA","Stage IB","Stage IIA","Stage IIB"), boolean=c("Early","Late"))
+testing <- target_dualler(testing, "Tumor.stage", first.group=c("Stage IA","Stage IB","Stage IIA","Stage IIB"), boolean=c("Early","Late"))
 
-prediction.annot <- prediction.annot[anti.selector,]
-prediction.exp <- exp[,match(anti.selector, colnames(exp))]
+norm.prep <- preProcess(training[, -1], method = c("center", "scale"))
+norm.training <- cbind("Tumor.stage"=training[,1], predict(norm.prep, training[,-1]))
+norm.testing <- cbind("Tumor.stage"=testing[,1], predict(norm.prep, testing[,-1]))
 
-exp.var <- train.exp %>% apply(1, var)
-t50.train.exp.var <- t(train.exp[names(sort(exp.var, decreasing = T)[1:50]),])
-train <- data.frame(train.annot$Tumor.stage, t50.train.exp.var)
-colnames(train) <- c("Tumor.stage", colnames(train)[-1])
+rf.reg <- randomForest(Tumor.stage ~ ., data = training, importance = TRUE, ntree = 500)
+log.reg <- glm(Tumor.stage ~ ., data = training, family = "binomial")
+knn.reg <- train(Tumor.stage ~ ., data = norm.training,  method = "knn", tuneGrid=expand.grid(k = 1:10), trControl=trainControl(method = "cv", number = 5, classProbs = TRUE))
 
-rf.reg <- randomForest(Tumor.stage ~ ., data = train, importance = TRUE, ntree = 500)
-log.reg <- glm(Tumor.stage ~ ., data = train, family = "binomial")
-
-t50.predict.exp.var <- t(prediction.exp[names(sort(exp.var, decreasing = T)[1:50]),])
-prediction <- data.frame(factor(prediction.annot$Tumor.stage), t50.predict.exp.var)
-colnames(prediction) <- c("Tumor.stage", colnames(prediction)[-1])
-
-rf.pred <- predict(rf.reg, prediction)
-log.pred <- factor(ifelse(predict(log.reg, prediction) > 0.5, "Late", "Early"))
+rf.pred <- predict(rf.reg, testing[,-1])
+log.pred <- factor(ifelse(predict(log.reg, testing[,-1]) > 0.5, "Late", "Early"))
+knn.pred <- predict(knn.reg, norm.testing, type = "prob")[, "Late"] %>% {factor(ifelse(. > 0.5, "Late", "Early"))} 
 
 ggplot() +
   geom_bar(aes(x=rf.pred), color="black", fill="white") +
@@ -191,10 +231,21 @@ ggplot() +
   theme_bw()
 
 ggplot() +
-  geom_bar(aes(x=train$Tumor.stage), color="black", fill="white") +
-  labs(title="Distribution in Training Data") +
+  geom_bar(aes(x=knn.pred), color="black", fill="white") +
+  labs(title="Distribution in k-Nearest Neighbours Prediction") +
   theme_bw()
 
-
+ggplot() +
+  geom_bar(aes(x=testing$Tumor.stage), color="black", fill="white") +
+  labs(title="Distribution in Testing Data") +
+  theme_bw()
 ```
 
+Confusion matrices
+
+```{r}
+for (i in c("rf.pred","log.pred")) {
+  confusionMatrix(get(i), testing$Tumor.stage) %>% show()
+}
+confusionMatrix(knn.pred, norm.testing$Tumor.stage)
+```
