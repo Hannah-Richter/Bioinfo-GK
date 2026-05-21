@@ -129,37 +129,15 @@ target_dualler <- function(data, target, first.group, boolean) {
   data
 }
 
-abs_imper <- function(data, mode) {
-  if (mode=="rf") {
-    abs.imp <- c()
-    imp.mat <- data[["importance"]]
-    for (i in seq_len(nrow(imp.mat))) {
-      abs.imp <- {abs(imp.mat[i, 2]-imp.mat[i, 1])} %>% {append(abs.imp, .)}
-    }
-    names(abs.imp) <- rownames(imp.mat)
-    return(abs.imp)
-  } else if (mode=="mult") {
-    abs.imp <- c()
-    imp.mat <- data %>% coef()
-    for (i in seq_len(ncol(imp.mat))) {
-      x <- sqrt(imp.mat[1, i]^2+imp.mat[2, i]^2)
-      abs.imp <- append(abs.imp, x)
-    }
-    names(abs.imp) <- colnames(imp.mat)
-    return(abs.imp)
-  }
-}
-
 data <- cbind(annot, t(exp))
 
 data <- data_splitter(data, "expression_subtype")
 training <- data[[1]]; testing <- data[[2]]
 
 rf.reg <- randomForest(expression_subtype ~ ., data = training, importance = TRUE, ntree = 500)
-rf.reg.abs.imp <- abs_imper(rf.reg, mode="rf")
+
 
 mult.reg <- multinom(expression_subtype ~ ., data = training)
-mult.reg.abs.imp <- abs_imper(mult.reg, mode="mult")
 
 rf.pred <- predict(rf.reg, testing[,-1])
 mult.pred <- predict(mult.reg, testing[,-1])
@@ -191,10 +169,54 @@ for (i in c("rf.pred","mult.pred")) {
 AUC-ROC
 
 ```{r}
-rf.reg.auc <- multiclass.roc(response = testing[,1], predictor = predict(rf.reg, testing, type = "prob"))$auc
-mult.reg.auc <- multiclass.roc(response = testing[,1], predictor = predict(mult.reg, testing, type = "prob"))$auc
+roc_plotter <- function(reg, truth, title, multiclass=T) {
+  if (multiclass) {
+    rocs <- multiclass.roc(response = truth[,1], predictor = predict(reg, truth, type = "prob"))$rocs
+    len <- length(rocs)
+    colours <- heat.colors(len)
+    plot(rocs[1][[1]][[1]], col=colours[1], main=title) 
+    for (i in 2:len) {lines(rocs[i][[1]][[1]], col=colours[i], lwd=2)}
+    legend("bottomright", legend = names(rocs), col=colours, lwd=2)
+  } else {
+    roc <- roc(response=testing[,1], predictor=predict(log.reg, testing[,-1]), levels=c("Early","Late"))
+    legname <- roc$levels; legname <- paste0(legname[1],"/",legname[2])
+    plot(roc, col = "red", main = title, lwd = 2)
+    legend("bottomright", legend = legname, col="red", lwd=2)
+  }
+}
+
+roc_plotter(rf.reg, testing, "Random Forest Regression")
+roc_plotter(mult.reg, testing, "Multinomial Logistical Regression")
 ```
 
+Var Importance
+
+```{r}
+abs_imper <- function(data, mode) {
+  if (mode=="rf") {
+    imp.mat <- data[["importance"]]
+    abs.imp <- vector(length=nrow(imp.mat))
+    for (i in seq_len(length(abs.imp))) {
+      abs.imp[i] <- abs(imp.mat[i, 2]-imp.mat[i, 1])
+    }
+    names(abs.imp) <- rownames(imp.mat)
+  } else if (mode=="mult") {
+    imp.mat <- data %>% coef() %>% .[,-1]
+    abs.imp <- vector(length=ncol(imp.mat))
+    for (i in seq_len(length(abs.imp))) {
+      abs.imp[i] <- sqrt(imp.mat[1, i]^2+imp.mat[2, i]^2)
+    }
+    names(abs.imp) <- colnames(imp.mat)
+  } else if (mode=="binom") {
+    abs.imp <- data[["coefficients"]] %>% .[-1]
+  } else stop("Error: Tried to call function with unknown mode.")
+  return(abs.imp)
+}
+
+rf.abs.imp <- abs_imper(rf.reg, mode="rf") %>% sort(., T) %>% names() %>% .[1:50]
+mult.abs.imp <- abs_imper(mult.reg, mode="mult") %>% sort(., T) %>% names() %>% .[1:50]
+rf.abs.imp[rf.abs.imp %in% mult.abs.imp] %>% length
+```
 
 
 Rf, multinomial regressions, and kNN-clustering for target 'ajcc_pathologic_stage' (Tumor Stage), random selection for training due to full data available
@@ -248,4 +270,20 @@ for (i in c("rf.pred","log.pred")) {
   confusionMatrix(get(i), testing$Tumor.stage) %>% show()
 }
 confusionMatrix(knn.pred, norm.testing$Tumor.stage)
+```
+
+AUC-ROC
+
+```{r}
+roc_plotter(rf.reg, testing, "Random Forest Regression")
+roc_plotter(log.reg, testing, "Binomial Logistical Regression", F)
+```
+
+Var Importance
+
+```{r}
+rf.abs.imp <- abs_imper(rf.reg, mode="rf") %>% sort(., T) %>% names() %>% .[1:50]
+log.abs.imp <- abs_imper(log.reg, mode="binom") %>% sort(., T) %>% names() %>% .[1:50]
+rf.abs.imp[rf.abs.imp %in% log.abs.imp]
+
 ```
