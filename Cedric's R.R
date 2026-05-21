@@ -75,33 +75,32 @@ sum(Shapiro_p_values_normalised < 0.05)/length(Shapiro_p_values_normalised)
 
 #Differential Gene Expression
 
-#Which Samples have which subtype?
-Prox_inflam = which(luad_anot_clean$paper_expression_subtype=="prox.-inflam")
-Prox_prolif = which(luad_anot_clean$paper_expression_subtype=="prox.-prolif.")
-Terminal_resp = which(luad_anot_clean$paper_expression_subtype=="TRU")
+#Combine dataframes for easier (or maybe actually worse handling) and create list of unique subytpes as well as the subytpe each sample posseses
+exp_df = as.data.frame(luad_exp_clean) %>% column_to_rownames("gene") %>% t()
+gene_names = colnames(exp_df)
+anot_df = as.data.frame(luad_anot_clean) %>% column_to_rownames("barcode")
+combined_df = cbind(exp_df,anot_df)
+subtypes = unique(anot_df$paper_expression_subtype) %>% na.omit()
+sample_subtype = combined_df$paper_expression_subtype
 
 
-Exp_inflam = expression_data[Prox_inflam+1] %>% as.data.frame()
-Exp_prolif = expression_data[Prox_prolif+1] %>% as.data.frame()
-Exp_term = expression_data[Terminal_resp+1] %>% as.data.frame()
+#Prepare results data frame with all the genes and subytpes to be tested vs. rest
+DGE_df = data.frame(matrix(NA, nrow = length(gene_names), ncol = length(subtypes)))
+rownames(DGE_df) = gene_names
+colnames(DGE_df) = subtypes
 
-#Number of normal samples with subtype annotations
-sum(substr(luad_anot_clean$barcode, 14, 15)=="11"&!is.na(luad_anot_clean$paper_expression_subtype))
-#None of the subtype-annotated samples are normal samples -> we can utilise all subtype-annotated samples for our DGE analysis
-
-#DGE for one gene and one subtype as proof of concept
-
-
-
-p_values_1 = list()
-for (i in seq(1:dim(Exp_inflam)[1])) {
-  wilcox.test(x=unname(unlist(Exp_inflam[i,])),y = unname(unlist(cbind(Exp_prolif,Exp_term)[i,])),alternative ="two.sided")$p.value %>% append(p_values_1,.)
+#Run a Wilcox test for each subtype vs rest across each gene and save p-value of the test into result dataframe
+for (st in subtypes){
+  not_st = subtypes[subtypes != st]
+  for (gene in gene_names) {
+  exp_vals = combined_df[[gene]]
+  in_group = exp_vals[which(sample_subtype == st)]
+  out_group = exp_vals[which(sample_subtype %in% not_st)]
+  temporary_test_result = wilcox.test(in_group,out_group,alternative = "two.sided")
+  DGE_df[gene,st] = temporary_test_result$p.value
+   }
 }
 
 
 
-Exp_inflam[1,] %>% unlist() %>% unname() %>% wilcox.test(y = unname(unlist(cbind(Exp_prolif,Exp_term)[1,])),alternative ="two.sided") %>% .$p.value
 
-dim(Exp_inflam)[1]
-
-#Run across all subtypes and genes
