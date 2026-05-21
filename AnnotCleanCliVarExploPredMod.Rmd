@@ -215,7 +215,7 @@ abs_imper <- function(data, mode) {
 
 rf.abs.imp <- abs_imper(rf.reg, mode="rf") %>% sort(., T) %>% names() %>% .[1:50]
 mult.abs.imp <- abs_imper(mult.reg, mode="mult") %>% sort(., T) %>% names() %>% .[1:50]
-rf.abs.imp[rf.abs.imp %in% mult.abs.imp] %>% length
+rf.abs.imp[rf.abs.imp %in% mult.abs.imp]
 ```
 
 
