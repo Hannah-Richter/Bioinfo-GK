@@ -1,7 +1,7 @@
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
-
+library(pheatmap)
 
 load("LUAD_data.RData")
 
@@ -101,6 +101,24 @@ for (st in subtypes){
    }
 }
 
+#BH correciton
+BH_DGE_df = flatten(DGE_df) %>% p.adjust("BH") %>% matrix(ncol = 3) %>% as.data.frame(row.names = gene_names)
+colnames(BH_DGE_df) = subtypes
 
 
+#Top 18 genes for each subtype vs rest comparison
+top_DEGs = gene_names[which(apply(BH_DGE_df,2,rank)<18)%%length(gene_names)]
+n_distinct(top_DEGs)
+# there are only 49 unique entries among the 51 total entries
+#The two repeated genes are:
+unique(top_DEGs) %>% sort() %>% .[which(as.vector(table(top_DEGs))>1)]
+#Both of these are repeated twice. We will simply make a heatmap of the 49 unique DEGs among the 3 top 18 lists.
 
+
+expression_of_DEGs = as.data.frame(expression_data) %>% column_to_rownames(colnames(expression_data)[1]) %>% .[expression_data[[1]] %in% unique(top_DEGs),]# %>% .[which(!is.na(luad_anot_clean$paper_expression_subtype))]
+
+DEG_anot = as.data.frame(luad_anot_clean) %>% column_to_rownames(colnames(luad_anot_clean)[1]) %>% select(paper_expression_subtype,ajcc_pathologic_stage,paper_Smoking.Status)# %>% .[which(!is.na(luad_anot_clean$paper_expression_subtype)),]
+
+# filter_at(vars(), all_vars(!is.na(.)))
+
+pheatmap(t(expression_of_DEGs), show_colnames = FALSE, show_rownames = FALSE, annotation_row = DEG_anot)
