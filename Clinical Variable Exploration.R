@@ -20,7 +20,7 @@ luad_anot_clean %>%
          filter(!is.na(paper_Age.at.diagnosis)) %>% 
          ggplot(aes(x = paper_Age.at.diagnosis)) +
          geom_histogram()
-#patients are between 41 and 85 years old
+
 mean(luad_anot_clean$paper_Age.at.diagnosis, na.rm = TRUE)
 median(luad_anot_clean$paper_Age.at.diagnosis, na.rm = TRUE)
 
@@ -51,3 +51,13 @@ table(luad_anot_clean$paper_Fusions)
 #Explore iCluster and CIMP methylation signature via cross-tabulation
 table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_CIMP.methylation.signature.)
 #most high CIMp methylation signature samples are in Cluster Group 3 and 4, in Cluster Group 1 are only low CIMP methylation samples
+
+#other cross tabulations with iCluster Group
+table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_expression_subtype)
+
+#cross tabulation of iCluster Group with Sex shows that the male and female patient samples are not equally grouped, the biggest subgroup is female patients with iClusterGroup 5
+barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_Sex),
+        beside=TRUE, legend=TRUE)
+#cross tabulation of iCluster Group with Age shows no clear association
+barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_Age.at.diagnosis))
+barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$ajcc_pathologic_stage))
