@@ -114,11 +114,18 @@ n_distinct(top_DEGs)
 unique(top_DEGs) %>% sort() %>% .[which(as.vector(table(top_DEGs))>1)]
 #Both of these are repeated twice. We will simply make a heatmap of the 49 unique DEGs among the 3 top 18 lists.
 
-
-expression_of_DEGs = as.data.frame(expression_data) %>% column_to_rownames(colnames(expression_data)[1]) %>% .[expression_data[[1]] %in% unique(top_DEGs),]# %>% .[which(!is.na(luad_anot_clean$paper_expression_subtype))]
-
-DEG_anot = as.data.frame(luad_anot_clean) %>% column_to_rownames(colnames(luad_anot_clean)[1]) %>% select(paper_expression_subtype,ajcc_pathologic_stage,paper_Smoking.Status)# %>% .[which(!is.na(luad_anot_clean$paper_expression_subtype)),]
-
-# filter_at(vars(), all_vars(!is.na(.)))
-
+#Select top 49 genes
+expression_of_DEGs = as.data.frame(expression_data) %>% column_to_rownames(colnames(expression_data)[1]) %>% .[expression_data[[1]] %in% unique(top_DEGs),] %>% .[which(!is.na(luad_anot_clean$paper_expression_subtype))]
+#Select desired annotation columns
+DEG_anot = as.data.frame(luad_anot_clean) %>% column_to_rownames(colnames(luad_anot_clean)[1]) %>% select(paper_expression_subtype,ajcc_pathologic_stage,paper_Smoking.Status) %>% .[which(!is.na(luad_anot_clean$paper_expression_subtype)),]
+#Heatmap with annotation
 pheatmap(t(expression_of_DEGs), show_colnames = FALSE, show_rownames = FALSE, annotation_row = DEG_anot)
+
+#Select top 5 DEGs across all subtypes
+BH_DGE_df = BH_DGE_df %>% mutate(minimum = apply(BH_DGE_df, MARGIN = 1, FUN = function(x) min(x)))
+#top_5 = BH_DGE_df %>% arrange(minimum) %>% rownames() %>% .[1:5]
+#Select only those 5 genes and only the samples for which we know expression subtypes
+top_5_expression = exp_df[which(!is.na(luad_anot_clean$paper_expression_subtype)),which(rank(BH_DGE_df$minimum)<6)] %>% as.data.frame()
+
+ggplot(top_5_expression) +
+  geom_boxplot()
