@@ -7,6 +7,14 @@ load("LUAD_data.RData")
 
 expression_data = luad_exp_clean
 
+NA_flattener <- function(data) {
+  as.data.frame(apply(data, 2, function(x) {
+    x[which(x=="[unknown]" | x=="[not available]" | x=="[Not Available]")] <- NA
+    return(x)
+  }))
+}
+
+luad_anot_clean = NA_flattener(luad_anot_clean)
 
 #qq-plots for all genes from one patient
 ggplot(expression_data) +
@@ -123,9 +131,25 @@ pheatmap(t(expression_of_DEGs), show_colnames = FALSE, show_rownames = FALSE, an
 
 #Select top 5 DEGs across all subtypes
 BH_DGE_df = BH_DGE_df %>% mutate(minimum = apply(BH_DGE_df, MARGIN = 1, FUN = function(x) min(x)))
-#top_5 = BH_DGE_df %>% arrange(minimum) %>% rownames() %>% .[1:5]
 #Select only those 5 genes and only the samples for which we know expression subtypes
-top_5_expression = exp_df[which(!is.na(luad_anot_clean$paper_expression_subtype)),which(rank(BH_DGE_df$minimum)<6)] %>% as.data.frame()
+top_5_expression = exp_df[,which(rank(BH_DGE_df$minimum)<6)] %>% as.data.frame() %>% mutate(subtype=luad_anot_clean$paper_expression_subtype)
+#top_5_expression = exp_df[which(!is.na(luad_anot_clean$paper_expression_subtype)),which(rank(BH_DGE_df$minimum)<6)] %>% as.data.frame() %>% mutate(subtype=DEG_anot$paper_expression_subtype)
+top_5_expression_long = top_5_expression %>% rownames_to_column(var = "Sample ID") %>% pivot_longer(cols = c(colnames(top_5_expression)[1:5]), names_to = "gene", values_to = "expr")
 
-ggplot(top_5_expression) +
-  geom_boxplot()
+ggplot(top_5_expression_long, aes(x = subtype, y = expr, fill = subtype)) +
+  geom_boxplot() +
+  facet_wrap(~gene) +
+  labs(x = "Subtype", y = "Expression")
+
+#Oncogenes or TUmour Suppressor
+#ADH1B: Alcohol dehydrogenase 1B; literature findings on LUAD and decreased ADH1B+ CAFs; other finding ADH1B reduces tumor stemness by activating cAMP/PKA/CERB1 signaling.
+#KPNA2: Karyopherin alpha 2, nuclear export protein; key target in tumour research, tumour progression, localisation of proteins, poor prognosis
+#NFIX: Nuclear factor 1 X-type, member of the nuclear factor I family; transcription factor, expression in adults limited and normally seen in embryonic development, previously found in tumours
+#RASGRF1: Ras protein-specific guanine nucleotide-releasing factor 1, RAS-activating guanine exchange factor, fusions common, pathways involving RAS commonly involved in cancer
+#TPX2: Targeting protein for Xklp2; microtubule assembly in the M phase, overexpression in various cancers
+
+
+
+#Correlation Matrix for top 30 DEGs
+top_30_cor = exp_df[,which(rank(BH_DGE_df$minimum)<31)] %>% cor(method = "spearman")
+pheatmap(top_30_cor, main = "Correlation among the Top 30 differentially expressed genes")
