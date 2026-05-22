@@ -16,6 +16,7 @@ luad_anot_clean_num<- na.omit(luad_anot_clean_num)
 #prepare expression_subtype data, convert names to valid R variable names
 luad_anot_clean_num$paper_expression_subtype[luad_anot_clean_num$paper_expression_subtype == "prox.-inflam"] <- "PI"
 luad_anot_clean_num$paper_expression_subtype[luad_anot_clean_num$paper_expression_subtype == "prox.-prolif."] <- "PP"
+
 #convert the categorical values into numerical ones
 luad_anot_clean_num$paper_expression_subtype <- factor(luad_anot_clean_num$paper_expression_subtype)
 luad_anot_clean_num$paper_Sex <- factor(luad_anot_clean_num$paper_Sex) 
@@ -23,7 +24,6 @@ luad_anot_clean_num$paper_Tumor.stage <- factor(luad_anot_clean_num$paper_Tumor.
 luad_anot_clean_num$paper_Smoking.Status <- factor(luad_anot_clean_num$paper_Smoking.Status)
 luad_anot_clean_num$ajcc_pathologic_stage <- factor(luad_anot_clean_num$ajcc_pathologic_stage)
 str(luad_anot_clean_num)
-
 
 #divide in train and test data 70/30
 set.seed(123)
