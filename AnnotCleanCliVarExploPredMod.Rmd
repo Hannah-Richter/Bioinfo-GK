@@ -121,33 +121,28 @@ data_splitter <- function(data, target, split=0.7, include.healthy=F, top.var.cu
   return(list(training,testing))
 }
 
-target_dualler <- function(data, target, first.group, boolean) {
-  x <- data[[target]]
-  first <- tolower(x) %in% tolower(first.group)
-  data[,target] <- ifelse(first, boolean[1], boolean[2]) %>% factor()
-  data
-}
-
 data <- cbind(annot, t(exp))
 
 data <- data_splitter(data, "expression_subtype")
 training <- data[[1]]; testing <- data[[2]]
 
-rf.reg <- randomForest(expression_subtype ~ ., data = training, importance = TRUE, ntree = 500)
+norm.prep <- preProcess(training[, -1], method = c("center", "scale"))
+training <- cbind("expression_subtype"=training[,1], predict(norm.prep, training[,-1]))
+testing <- cbind("expression_subtype"=testing[,1], predict(norm.prep, testing[,-1]))
 
+es.rf.reg <- randomForest(expression_subtype ~ ., data = training, importance = TRUE, ntree = 500)
+es.mult.reg <- multinom(expression_subtype ~ ., data = training)
 
-mult.reg <- multinom(expression_subtype ~ ., data = training)
-
-rf.pred <- predict(rf.reg, testing[,-1])
-mult.pred <- predict(mult.reg, testing[,-1])
+es.rf.pred <- predict(es.rf.reg, testing[,-1])
+es.mult.pred <- predict(es.mult.reg, testing[,-1])
 
 ggplot() +
-  geom_bar(aes(x=rf.pred), color="black", fill="white") +
+  geom_bar(aes(x=es.rf.pred), color="black", fill="white") +
   labs(title="Distribution in Random Forest Prediction") +
   theme_bw()
 
 ggplot() +
-  geom_bar(aes(x=mult.pred), color="black", fill="white") +
+  geom_bar(aes(x=es.mult.pred), color="black", fill="white") +
   labs(title="Distribution in Multinomial Logistic Prediction") +
   theme_bw()
 
@@ -160,8 +155,8 @@ ggplot() +
 Confusion matrices
 
 ```{r, echo=T}
-for (i in c("rf.pred","mult.pred")) {
-  confusionMatrix(get(i), testing$expression_subtype) %>% show()
+for (i in c("es.rf","es.mult")) {
+  assign(paste0(i, ".con"), confusionMatrix(get(paste0(i, ".pred")), testing$expression_subtype))
 }
 ```
 
@@ -177,8 +172,8 @@ multi_roc_plotter <- function(reg, truth, title) {
   legend("bottomright", legend = names(rocs), col=colours, lwd=2)
 }
 
-multi_roc_plotter(rf.reg, testing, "Random Forest Regression")
-multi_roc_plotter(mult.reg, testing, "Multinomial Logistical Regression")
+multi_roc_plotter(es.rf.reg, testing, "Random Forest Regression")
+multi_roc_plotter(es.mult.reg, testing, "Multinomial Logistical Regression")
 ```
 
 Var Importance
@@ -187,65 +182,90 @@ Var Importance
 abs_imper <- function(data, mode) {
   if (mode=="rf") {
     imp.mat <- data[["importance"]]
-    abs.imp <- vector(length=nrow(imp.mat))
-    for (i in seq_len(length(abs.imp))) {
-      abs.imp[i] <- abs(imp.mat[i, 2]-imp.mat[i, 1])
+    imp <- vector(length=nrow(imp.mat))
+    for (i in seq_len(length(imp))) {
+      imp[i] <- abs(imp.mat[i, 2]-imp.mat[i, 1])
     }
-    names(abs.imp) <- rownames(imp.mat)
+    names(imp) <- rownames(imp.mat)
   } else if (mode=="mult") {
     imp.mat <- data %>% coef() %>% .[,-1]
-    abs.imp <- vector(length=ncol(imp.mat))
-    for (i in seq_len(length(abs.imp))) {
-      abs.imp[i] <- sqrt(imp.mat[1, i]^2+imp.mat[2, i]^2)
+    imp <- vector(length=ncol(imp.mat))
+    for (i in seq_len(length(imp))) {
+      imp[i] <- sqrt(imp.mat[1, i]^2+imp.mat[2, i]^2)
     }
-    names(abs.imp) <- colnames(imp.mat)
+    names(imp) <- colnames(imp.mat)
   } else if (mode=="binom") {
-    abs.imp <- data[["coefficients"]] %>% .[-1]
+    imp <- data[["coefficients"]] %>% .[-1]
   } else stop("Error: Tried to call function with unknown mode.")
-  return(abs.imp)
+  return(imp)
 }
 
-rf.abs.imp <- abs_imper(rf.reg, mode="rf") %>% sort(., T) %>% {names(.)[1:50]}
-mult.abs.imp <- abs_imper(mult.reg, mode="mult") %>% sort(., T) %>% {names(.)[1:50]}
-rf.abs.imp[rf.abs.imp %in% mult.abs.imp]
+imp_integrater <- function(imp1, imp2, max.depth=50, integ.len=5) {
+  for (i in seq_len(max.depth)) {
+    temp <- imp1[1:i]
+    integ <- temp[temp %in% imp2[1:i]]
+    if (length(integ)>=integ.len) break
+  }
+  integ <- na.omit(integ)
+  if (length(integ)<integ.len) warning(paste0("Could only find ", length(integ), " overlaps at max depth of ", max.depth, "! Recommend to repeat call with higher max depth."))
+  integ <- list("important.variables"=integ, "depth"=i)
+  return(integ)
+}
+
+es.rf.imp <- abs_imper(es.rf.reg, mode="rf") %>% sort(., T) %>% names()
+es.mult.imp <- abs_imper(es.mult.reg, mode="mult") %>% sort(., T) %>% names()
+es.rf.imp[es.rf.imp %in% es.mult.imp]
+
+imp_integrater(es.rf.imp, es.mult.imp)
 ```
 
 
 Rf, multinomial regressions, and kNN-clustering for target 'ajcc_pathologic_stage' (Tumor Stage), random selection for training due to full data available
 
 ```{r, echo=T}
+target_dualler <- function(data, target, first.group, boolean) {
+  x <- data[[target]]
+  first <- tolower(x) %in% tolower(first.group)
+  data[,target] <- ifelse(first, boolean[1], boolean[2]) %>% factor()
+  data
+}
+
 data <- cbind(annot, t(exp))
 
-data <- data_splitter(data, "Tumor.stage", top.var.cutoff = 50)
+data <- data_splitter(data, "Tumor.stage")
 training <- data[[1]]; testing <- data[[2]]
 
-training <- target_dualler(training, "Tumor.stage", first.group=c("Stage IA","Stage IB","Stage IIA","Stage IIB"), boolean=c("Early","Late"))
-testing <- target_dualler(testing, "Tumor.stage", first.group=c("Stage IA","Stage IB","Stage IIA","Stage IIB"), boolean=c("Early","Late"))
+fg <- c("Stage I","Stage IA","Stage IB","Stage II","Stage IIA","Stage IIB"); b <- c("Early","Late")
+
+training <- target_dualler(training, "Tumor.stage", first.group=fg, boolean=b)
+testing <- target_dualler(testing, "Tumor.stage", first.group=fg, boolean=b)
+
+rm(fg, b)
 
 norm.prep <- preProcess(training[, -1], method = c("center", "scale"))
-norm.training <- cbind("Tumor.stage"=training[,1], predict(norm.prep, training[,-1]))
-norm.testing <- cbind("Tumor.stage"=testing[,1], predict(norm.prep, testing[,-1]))
+training <- cbind("Tumor.stage"=training[,1], predict(norm.prep, training[,-1]))
+testing <- cbind("Tumor.stage"=testing[,1], predict(norm.prep, testing[,-1]))
 
-rf.reg <- randomForest(Tumor.stage ~ ., data = training, importance = TRUE, ntree = 500)
-log.reg <- glm(Tumor.stage ~ ., data = training, family = "binomial")
-knn.reg <- train(Tumor.stage ~ ., data = norm.training,  method = "knn", tuneGrid=expand.grid(k = 1:10), trControl=trainControl(method = "cv", number = 5, classProbs = TRUE))
+ts.rf.reg <- randomForest(Tumor.stage ~ ., data = training, importance = TRUE, ntree = 500)
+ts.log.reg <- glm(Tumor.stage ~ ., data = training, family = "binomial")
+ts.knn.reg <- train(Tumor.stage ~ ., data = training,  method = "knn", tuneGrid=expand.grid(k = 1:10), trControl=trainControl(method = "cv", number = 5, classProbs = TRUE))
 
-rf.pred <- predict(rf.reg, testing[,-1])
-log.pred <- factor(ifelse(predict(log.reg, testing[,-1]) > 0.5, "Late", "Early"))
-knn.pred <- predict(knn.reg, norm.testing, type = "prob")[, "Late"] %>% {factor(ifelse(. > 0.5, "Late", "Early"))} 
+ts.rf.pred <- predict(ts.rf.reg, testing[,-1])
+ts.log.pred <- factor(ifelse(predict(ts.log.reg, testing[,-1]) > 0.5, "Late", "Early"))
+ts.knn.pred <- predict(ts.knn.reg, testing, type = "prob")[, "Late"] %>% {factor(ifelse(. > 0.5, "Late", "Early"))} 
 
 ggplot() +
-  geom_bar(aes(x=rf.pred), color="black", fill="white") +
+  geom_bar(aes(x=ts.rf.pred), color="black", fill="white") +
   labs(title="Distribution in Random Forest Prediction") +
   theme_bw()
 
 ggplot() +
-  geom_bar(aes(x=log.pred), color="black", fill="white") +
+  geom_bar(aes(x=ts.log.pred), color="black", fill="white") +
   labs(title="Distribution in Multinomial Logistic Prediction") +
   theme_bw()
 
 ggplot() +
-  geom_bar(aes(x=knn.pred), color="black", fill="white") +
+  geom_bar(aes(x=ts.knn.pred), color="black", fill="white") +
   labs(title="Distribution in k-Nearest Neighbours Prediction") +
   theme_bw()
 
@@ -258,30 +278,77 @@ ggplot() +
 Confusion matrices
 
 ```{r, echo=T}
-for (i in c("rf.pred","log.pred")) {
-  confusionMatrix(get(i), testing$Tumor.stage) %>% show()
+for (i in c("ts.rf","ts.log")) {
+  assign(paste0(i, ".con"), confusionMatrix(get(paste0(i, ".pred")), testing$Tumor.stage))
 }
-confusionMatrix(knn.pred, norm.testing$Tumor.stage)
+ts.knn.con <- confusionMatrix(ts.knn.pred, norm.testing$Tumor.stage)
 ```
 
 AUC-ROC
 
 ```{r, echo=T}
 roc_plotter <- function (reg, truth, title) {
-  roc <- roc(response=testing[,1], predictor=predict(log.reg, testing[,-1]), levels=c("Early","Late"))
+  roc <- roc(response=testing[,1], predictor=predict(reg, testing[,-1]), levels=c("Early","Late"))
   legname <- roc$levels; legname <- paste0(legname[1],"/",legname[2])
   plot(roc, col = "red", main = title, lwd = 2)
   legend("bottomright", legend = legname, col="red", lwd=2)
 }
 
-multi_roc_plotter(rf.reg, testing, "Random Forest Regression")
-roc_plotter(log.reg, testing, "Binomial Logistical Regression")
+multi_roc_plotter(ts.rf.reg, testing, "Random Forest Regression")
+roc_plotter(ts.log.reg, testing, "Binomial Logistical Regression")
 ```
 
 Var Importance
 
 ```{r, echo=T}
-rf.abs.imp <- abs_imper(rf.reg, mode="rf") %>% sort(., T) %>% {names(.)[1:50]}
-log.abs.imp <- abs_imper(log.reg, mode="binom") %>% sort(., T) %>% {names(.)[1:50]}
-rf.abs.imp[rf.abs.imp %in% log.abs.imp]
+ts.rf.imp <- abs_imper(ts.rf.reg, mode="rf") %>% sort(., T) %>% names()
+ts.log.imp <- abs_imper(ts.log.reg, mode="binom") %>% sort(., T) %>% names()
+ts.rf.imp[ts.rf.imp %in% ts.log.imp]
+
+imp_integrater(ts.rf.imp, ts.log.imp)
 ```
+
+Comparison
+
+For each model, report: accuracy, F1, per-class precision/recall.
+•       Are the most predictive genes (RF importance / LR coefficients) also the top DEGs? Show the overlap.
+•       Provide a biological interpretation of the top 5 predictive genes
+
+```{r}
+confusion_extracter <- function(con) {
+  Accuracy <- con$overall["Accuracy"]
+  if (length(dim(con$byClass))==2) {
+    F1 <- con$byClass[,"F1"] %>% mean()
+    Precisions <- con$byClass[,"Precision"]
+    Recalls <- con$byClass[,"Recall"]
+    res <- vector(length={2+nrow(con$byClass)*2})
+    res[1:2] <- c(Accuracy, F1); names(res)[1:2] <- c("Accuracy", "Macro-Averaged F1")
+    temp <- length(Precisions)
+    for (i in 1:temp) {
+      res[2+i] <- Precisions[i]; names(res)[2+i] <- paste("Precision for", names(Precisions)[i])
+      res[2+temp+i] <- Recalls[i]; names(res)[2+temp+i] <- paste("Recall for", names(Recalls)[i])
+    }
+    return(res)
+  } else {
+    F1 <- con$byClass["F1"]
+    Precision <- con$byClass["Precision"]
+    Recall <- con$byClass["Recall"]
+    return(c(Accuracy, F1, Precision, Recall))
+  }
+
+}
+
+es.rf.q <- confusion_extracter(es.rf.con)
+es.mult.q <- confusion_extracter(es.mult.con)
+ts.log.q <- confusion_extracter(ts.log.con)
+ts.rf.q <- confusion_extracter(ts.rf.con)
+ts.knn.q <- confusion_extracter(ts.knn.con)
+
+
+es.comp.table <- data.frame("Random Forest"=es.rf.q, "Multinomial Logistical"=es.mult.q)
+es.comp.table
+
+ts.comp.table <- data.frame("Random Forest"=ts.rf.q, "Binomal Logistical"=ts.log.q, "k-Nearest Neighbours"=ts.knn.q)
+ts.comp.table
+```
+
