@@ -2,14 +2,16 @@
 title: "Annotation Cleaning, Clinical Variable Exploration, and Predictive Modelling"
 author: "Merlin"
 date: "2026-05-19"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = F)
+```{r setup, include=F, echo=F}
+knitr::opts_chunk$set(include = F, echo = F)
 ```
 
-```{r, echo=F}
+```{r}
 library(tidyverse)
 library(dplyr)
 library(randomForest)
@@ -36,7 +38,7 @@ head(annot)
 
 We can see here, that there are indeed values missing in a lot of the columns. Looking at the documentation for the data source ({{SOURCE}}), we can also see, that the first three segments = or the first 12 digits = of the barcode encode the patient ID. We thus replace paper_patient with the barcode trimmed to position 12.
 
-```{r, echo=F}
+```{r}
 annot$paper_patient <- strtrim(annot$barcode, 12)
 ```
 
@@ -49,7 +51,7 @@ length(grep("paper", colnames(annot)))
 
 As this also makes the 'paper_' prefix superfluous we strip it from the paper columns. Furthermore, we noticed textual NAs, which were entered into the data set as '[unknown]', '[not available]' and '[Not Available]'. We thus strip these and replace them by real NAs. We perform the same operation on the expression data, whilst we're at it. The paper_Tumor.stage column encodes the Ajcc pathological stage. Thus, we replaced it with the ajcc staging.
 
-```{r, echo=F}
+```{r, echo=T}
 NA_flattener <- function(data) {
   for (i in seq_along(data)) {
     data[tolower(data[[i]]) %in% c("[unknown]","[not available]"), i ] <- NA
@@ -61,7 +63,9 @@ NA_counter <- function(data, per_col=F) {
   s <- apply(data, 2, function(k) sum(is.na(k)))
   if (per_col) return(s) else return (sum(s))
 }
+```
 
+```{r}
 colnames(annot) <- c(colnames(annot)[1], colnames(annot)[-1] %>% substring(7))
 annot$Tumor.stage <- luad_anot_clean$ajcc_pathologic_stage
 annot <- NA_flattener(annot)
@@ -78,7 +82,7 @@ exp <- column_to_rownames(exp, "gene")
 
 When looking at the counts of NAs, the expression data are complete, whilst the annotation data have 5623 NAs in total distributed relatively evenly across all columns, with patient and Tumor.stage being the exceptions.
 
-```{r}
+```{r, echo=T}
 NA_counter(exp)
 NA_counter(annot)
 NA_counter(annot, T)
@@ -87,7 +91,7 @@ NA_counter(annot, T)
 From the head-call above, we know that all of the text columns are characters, even when a factor would be the more appropriate data type. We thus go through the cleaned annotation table and factorise, where appropriate.
 
 ```{r}
-for (i in colnames(annot)) {
+for (i in colnames(annot)) { 
   if (length(unique(annot[,i])) <= 10) {annot[,i] <- annot[,i] %>% factor()}
 }
 ```
@@ -104,22 +108,17 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 
 Rf and multinomial regressions for target 'expression_subtype'
 
-```{r}
-data_splitter <- function(data, target, method="single", split=0.7, include.healthy=F, top.var.cutoff=50, annot.cols=21) {
-  if (method=="single") {
-    if (!include.healthy) data <- data[data$is.tumour,]
-    data <- data[!is.na(data[,target]),]
-    data.dat <- data[,{annot.cols+1}:ncol(data)]
-    top.var <- cbind(data[,target], data.dat[,names(sort(apply(data.dat, 2, var), decreasing=T)[1:top.var.cutoff])])
-    colnames(top.var)[1] <- target
-    selector <- sample(rownames(top.var), floor(nrow(top.var)*split))
-    anti.selector <- rownames(top.var)[!{rownames(top.var) %in% selector}]
-    training <- top.var[selector,]; testing <- top.var[anti.selector,]
-    return(list(training,testing))
-  } else if (strsplit(method,"-")[1]=="CV") {
-    tryCatch(x_vals <- strsplit(method, "-")[2] %>% as.numeric(), stop("For multiple crossvalidation method, use 'CV-[number of cross validations]."))
-    
-  } else stop("Method needs to be 'single' or 'CV-[number of cross validations].")
+```{r, echo=T}
+data_splitter <- function(data, target, split=0.7, include.healthy=F, top.var.cutoff=50, annot.cols=21) {
+  if (!include.healthy) data <- data[data$is.tumour,]
+  data <- data[!is.na(data[,target]),]
+  data.dat <- data[,{annot.cols+1}:ncol(data)]
+  top.var <- cbind(data[,target], data.dat[,names(sort(apply(data.dat, 2, var), decreasing=T)[1:top.var.cutoff])])
+  colnames(top.var)[1] <- target
+  selector <- sample(rownames(top.var), floor(nrow(top.var)*split))
+  anti.selector <- rownames(top.var)[!{rownames(top.var) %in% selector}]
+  training <- top.var[selector,]; testing <- top.var[anti.selector,]
+  return(list(training,testing))
 }
 
 target_dualler <- function(data, target, first.group, boolean) {
@@ -160,7 +159,7 @@ ggplot() +
 
 Confusion matrices
 
-```{r}
+```{r, echo=T}
 for (i in c("rf.pred","mult.pred")) {
   confusionMatrix(get(i), testing$expression_subtype) %>% show()
 }
@@ -168,30 +167,23 @@ for (i in c("rf.pred","mult.pred")) {
 
 AUC-ROC
 
-```{r}
-roc_plotter <- function(reg, truth, title, multiclass=T) {
-  if (multiclass) {
-    rocs <- multiclass.roc(response = truth[,1], predictor = predict(reg, truth, type = "prob"))$rocs
-    len <- length(rocs)
-    colours <- heat.colors(len)
-    plot(rocs[1][[1]][[1]], col=colours[1], main=title) 
-    for (i in 2:len) {lines(rocs[i][[1]][[1]], col=colours[i], lwd=2)}
-    legend("bottomright", legend = names(rocs), col=colours, lwd=2)
-  } else {
-    roc <- roc(response=testing[,1], predictor=predict(log.reg, testing[,-1]), levels=c("Early","Late"))
-    legname <- roc$levels; legname <- paste0(legname[1],"/",legname[2])
-    plot(roc, col = "red", main = title, lwd = 2)
-    legend("bottomright", legend = legname, col="red", lwd=2)
-  }
+```{r, echo=T}
+multi_roc_plotter <- function(reg, truth, title) {
+  rocs <- multiclass.roc(response = truth[,1], predictor = predict(reg, truth, type = "prob"))$rocs
+  len <- length(rocs)
+  colours <- heat.colors(len)
+  plot(rocs[1][[1]][[1]], col=colours[1], main=title) 
+  for (i in 2:len) {lines(rocs[i][[1]][[1]], col=colours[i], lwd=2)}
+  legend("bottomright", legend = names(rocs), col=colours, lwd=2)
 }
 
-roc_plotter(rf.reg, testing, "Random Forest Regression")
-roc_plotter(mult.reg, testing, "Multinomial Logistical Regression")
+multi_roc_plotter(rf.reg, testing, "Random Forest Regression")
+multi_roc_plotter(mult.reg, testing, "Multinomial Logistical Regression")
 ```
 
 Var Importance
 
-```{r}
+```{r, echo=T}
 abs_imper <- function(data, mode) {
   if (mode=="rf") {
     imp.mat <- data[["importance"]]
@@ -213,15 +205,15 @@ abs_imper <- function(data, mode) {
   return(abs.imp)
 }
 
-rf.abs.imp <- abs_imper(rf.reg, mode="rf") %>% sort(., T) %>% names() %>% .[1:50]
-mult.abs.imp <- abs_imper(mult.reg, mode="mult") %>% sort(., T) %>% names() %>% .[1:50]
+rf.abs.imp <- abs_imper(rf.reg, mode="rf") %>% sort(., T) %>% {names(.)[1:50]}
+mult.abs.imp <- abs_imper(mult.reg, mode="mult") %>% sort(., T) %>% {names(.)[1:50]}
 rf.abs.imp[rf.abs.imp %in% mult.abs.imp]
 ```
 
 
 Rf, multinomial regressions, and kNN-clustering for target 'ajcc_pathologic_stage' (Tumor Stage), random selection for training due to full data available
 
-```{r}
+```{r, echo=T}
 data <- cbind(annot, t(exp))
 
 data <- data_splitter(data, "Tumor.stage", top.var.cutoff = 50)
@@ -265,7 +257,7 @@ ggplot() +
 
 Confusion matrices
 
-```{r}
+```{r, echo=T}
 for (i in c("rf.pred","log.pred")) {
   confusionMatrix(get(i), testing$Tumor.stage) %>% show()
 }
@@ -274,16 +266,22 @@ confusionMatrix(knn.pred, norm.testing$Tumor.stage)
 
 AUC-ROC
 
-```{r}
-roc_plotter(rf.reg, testing, "Random Forest Regression")
-roc_plotter(log.reg, testing, "Binomial Logistical Regression", F)
+```{r, echo=T}
+roc_plotter <- function (reg, truth, title) {
+  roc <- roc(response=testing[,1], predictor=predict(log.reg, testing[,-1]), levels=c("Early","Late"))
+  legname <- roc$levels; legname <- paste0(legname[1],"/",legname[2])
+  plot(roc, col = "red", main = title, lwd = 2)
+  legend("bottomright", legend = legname, col="red", lwd=2)
+}
+
+multi_roc_plotter(rf.reg, testing, "Random Forest Regression")
+roc_plotter(log.reg, testing, "Binomial Logistical Regression")
 ```
 
 Var Importance
 
-```{r}
-rf.abs.imp <- abs_imper(rf.reg, mode="rf") %>% sort(., T) %>% names() %>% .[1:50]
-log.abs.imp <- abs_imper(log.reg, mode="binom") %>% sort(., T) %>% names() %>% .[1:50]
+```{r, echo=T}
+rf.abs.imp <- abs_imper(rf.reg, mode="rf") %>% sort(., T) %>% {names(.)[1:50]}
+log.abs.imp <- abs_imper(log.reg, mode="binom") %>% sort(., T) %>% {names(.)[1:50]}
 rf.abs.imp[rf.abs.imp %in% log.abs.imp]
-
 ```

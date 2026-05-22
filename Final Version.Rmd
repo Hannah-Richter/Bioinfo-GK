@@ -1,0 +1,73 @@
+---
+title: "An Analysis of Clinical Variables and Gene Expression Data across Biopsies from Patients with Lung Adenocarcinomata"
+author: "Cedric, Hannah, Merlin"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, include = F) # All chunks in need of output need to manually be set to echo = T
+```
+
+# Introduction
+
+
+
+# Loading and Cleaning of Annotation and Expression Data
+
+
+
+# Data Exploration
+
+
+
+## Clinical Annotation
+
+
+
+## Expression Data
+
+
+
+# Data Analysis
+
+
+
+## Dimensionality Reduction of Annotation Data
+
+
+
+## Differential Expression Analysis
+
+
+
+## Expression Correlation amongst Highly Differentially Expressed Genes
+
+
+
+# Predictive Modelling
+
+
+
+## Based on Expression Data
+
+
+
+## Quality and Comparison of Models
+
+
+
+## Based on Clinical Annotation
+
+
+
+## Integrative Model
+
+
+
+# Discussion
+
+
+
+# Conclusion
+
