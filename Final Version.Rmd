@@ -301,8 +301,6 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 
 # Predictive Modelling
 
-
-
 ## Based on Expression Data
 
 ### Target: Expression Subtype
