@@ -6,7 +6,7 @@ output: pdf_document
 ---
 
 ```{r setup, include=F, echo=F}
-knitr::opts_chunk$set(echo = F, include = F) # All chunks in need of output need to manually be set to echo = T
+knitr::opts_chunk$set(echo = F, include = F, fig.width=8, fig.height=5, out.width="90%", fig.align="center") 
 
 library(tidyverse)
 library(dplyr)
@@ -202,9 +202,9 @@ down_sampler <- function(data, target) {
 
 # Loading and Cleaning of Annotation and Expression Data
 
- we want to clean up our annotation file. To do this we must first take a look at the file.
+We want to clean up our annotation file. To do this we must first take a look at the file.
 
-```{r, echo=T}
+```{r, include=T}
 annot <- luad_anot_clean
 head(annot)
 ```
@@ -241,7 +241,7 @@ exp <- column_to_rownames(exp, "gene")
 
 When looking at the counts of NAs, the expression data are complete, whilst the annotation data have 5623 NAs in total distributed relatively evenly across all columns, with patient and Tumor.stage being the exceptions.
 
-```{r, echo=T}
+```{r, include=T}
 NA_counter(exp)
 NA_counter(annot)
 NA_counter(annot, T)
@@ -249,7 +249,7 @@ NA_counter(annot, T)
 
 From the head-call above, we know that all of the text columns are characters, even when a factor or numeric type would be more appropriate. We thus go through the cleaned annotation table and factorise, where appropriate. Furthermore, where factorisation is inappropriate, we try to coerce each column to numeric type (accepting both comma and period as decimal delimiters) and discard all failed coercions. Lastly, we double check, that we see the intuitively appropriate classes for each column.
 
-```{r, echo=T}
+```{r}
 annot <- factor_numeriser(annot)
 
 classes.vector <- vector(length = ncol(annot))
@@ -332,7 +332,7 @@ es.mult.pred <- predict(es.mult.reg, es.testing[,-1])
 
 We want to take a look at the 5 most important variables for both models. For the random forest regression, we simply use variable importance as the metric. For multinomial logistical regression, we use the euclidean deviance of the coefficients from zero for each gene. These differ, though there is overlap. 
 
-```{r, echo=T}
+```{r, include=T}
 es.rf.imp <- variable_importance(es.rf.reg, mode="rf") %>% 
   sort(., T) %>% names()
 es.mult.imp <- variable_importance(es.mult.reg, mode="mult") %>%
@@ -345,8 +345,8 @@ es.mult.imp[1:5]
 
 We then walk through both lists of genes sorted by their importance to the models until we reach an overlaping selection of 5. The given depth shows us how many of the sorted list we need to include to get our overlap.
 
-```{r, echo=T}
-imp_integrater(es.rf.imp, es.mult.imp)
+```{r, include=T}
+imp_integrater(es.rf.imp, es.mult.imp) -> es.overlap; es.overlap
 ```
 
 
@@ -354,7 +354,7 @@ imp_integrater(es.rf.imp, es.mult.imp)
 
 We now do the exact same for the prediction of tumor stage, with the addition of splitting the tumour stages into only two categories: Early and Late.
 
-```{r, echo=T}
+```{r, include=T}
 data <- cbind(annot, t(exp))
 
 data <- data_splitter(data, "Tumor.stage")
@@ -382,7 +382,7 @@ ts.knn.pred <- predict(ts.knn.reg, ts.testing, type = "prob")[, "Late"] %>% {fac
 
 If we look at the importance of the various genes to the prediction, we again see some overlap between the random forest and binomial logistical regressions in the top 5 most important variables.
 
-```{r, echo=T}
+```{r, include=T}
 ts.rf.imp <- variable_importance(ts.rf.reg, mode="rf") %>%
   sort(., T) %>% names()
 ts.log.imp <- variable_importance(ts.log.reg, mode="binom") %>%
@@ -397,30 +397,30 @@ ts.knn.imp[1:5]
 
 We thus again look at how far we need to go to find an overlap between all three models of 5 important variables. 
 
-```{r, echo=T}
-imp_integrater(imp_integrater(ts.rf.imp, ts.log.imp, integ.len = 12)$important.variables, imp_integrater(ts.rf.imp, ts.knn.imp, integ.len = 12)$important.variables)
+```{r, include=T}
+imp_integrater(imp_integrater(ts.rf.imp, ts.log.imp, integ.len = 12)$important.variables, imp_integrater(ts.rf.imp, ts.knn.imp, integ.len = 12)$important.variables) -> ts.overlap; ts.overlap
 ```
 
 ## Quality and Comparison of Models
 
 To compare the quality of the modesl, we take a look at ROC curves to ascertain the quality of the expression subtype classifiers. The random forest classifier outstrips the multinomial logistical one, especially when it comes to distinguishing proximal-inflammatory from proximal-proliferative biopsies. 
 
-```{r, echo=T}
+```{r, include=T}
 multi_roc_plotter(es.rf.reg, es.testing, "Random Forest Classifier ROC-Curve")
 multi_roc_plotter(es.mult.reg, es.testing, "Multinomial Logistical Classifier ROC-Curve")
 ```
 
 We now take a look at the ROC curves for the tumour stage classifiers. We see that random forest classification and kNN outstrip logistical regression.
 
-```{r, echo=T}
+```{r, include=T}
 multi_roc_plotter(ts.rf.reg, ts.testing, "Random Forest Regression ROC-Curve")
 multi_roc_plotter(ts.knn.reg, ts.testing, "k-Nearest Neighbours Regression ROC-Curve")
 roc_plotter(ts.log.reg, ts.testing, "Binomial Logistical Regression ROC-Curve")
 ```
 
-When we look at key values for these models we can see why some of them don't perform well.
+When we look at key values for these classifiers (first table expression subtype classification, second table tumour stage classification) we can see why some of them don't perform well.
 
-```{r, echo=T}
+```{r, include=T}
 for (i in c("es.rf","es.mult")) {
   assign(paste0(i, ".con"), confusionMatrix(get(paste0(i, ".pred")), es.testing$expression_subtype))
 }
@@ -446,13 +446,13 @@ ts.comp.table
 
 In the prediction of tumour stage, we have the problem, that our samples at Early stage far outnumber those at Late stage.
 
-```{r, echo=T}
+```{r, include=T}
 table(ts.training$Tumor.stage)
 ```
 
 Rerunning training for the best performer (highest accuracy and precision) using a down-sampled training data set worsens performance.
 
-```{r, echo=T}
+```{r, include=T}
 ts.knn.cv.reg <- train(
   Tumor.stage ~ .,
   data = down_sampler(ts.training, "Tumor.stage"),
@@ -465,7 +465,7 @@ ts.knn.cv.reg %>% predict(ts.testing) %>% confusionMatrix(ts.testing$Tumor.stage
 
 Also the ROC Curve looks less healthy.
 
-```{r, echo=}
+```{r, include=T}
 multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-Nearest Neighbours Regression with Balanced Target Class")
 ```
 
