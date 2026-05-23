@@ -92,7 +92,7 @@ From the head-call above, we know that all of the text columns are characters, e
 
 ```{r}
 for (i in colnames(annot)) { 
-  if (length(unique(annot[,i])) <= 10) {annot[,i] <- annot[,i] %>% factor()}
+  if ({length(unique(annot[,i])) <= 10} && {!is.numeric(annot[,i])} && {!is.logical(annot[,i])}) {annot[,i] <- annot[,i] %>% factor()}
 }
 ```
 
@@ -109,28 +109,18 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 Rf and multinomial regressions for target 'expression_subtype'
 
 ```{r, echo=T}
-straight_data_splitter <- function(top.var, split) {
+data_splitter <- function(data, target, include.healthy=F, top.var.cutoff=50, annot.cols=21, split=0.7) {
   if (is.numeric(split)) {
+    if (!include.healthy) data <- data[data$is.tumour,]
+    data <- data[!is.na(data[,target]),]
+    data.dat <- data[,{annot.cols+1}:ncol(data)]
+    top.var <- cbind(data[,target], data.dat[,names(sort(apply(data.dat, 2, var), decreasing=T)[1:top.var.cutoff])])
+    colnames(top.var)[1] <- target
     selector <- sample(rownames(top.var), floor(nrow(top.var)*split))
     anti.selector <- rownames(top.var)[!{rownames(top.var) %in% selector}]
     training <- top.var[selector,]; testing <- top.var[anti.selector,]
     return(list(training,testing))
   } else stop("Attempted to call straight_data_splitter with non-numeric split.")
-}
-
-cv_data_splitter <- function(top.var, split) {
-  tryCatch(expr={
-      split <- strsplit(split, "-")[2] %>% as.numeric()
-    }, error)
-}
-  
-data_splitter <- function(data, target, include.healthy=F, top.var.cutoff=50, annot.cols=21, split=0.7, cv=F) {
-  if (!include.healthy) data <- data[data$is.tumour,]
-  data <- data[!is.na(data[,target]),]
-  data.dat <- data[,{annot.cols+1}:ncol(data)]
-  top.var <- cbind(data[,target], data.dat[,names(sort(apply(data.dat, 2, var), decreasing=T)[1:top.var.cutoff])])
-  colnames(top.var)[1] <- target
-  if (cv) return(cv_data_splitter(top.var, split)) else return(straight_data_splitter(top.var, split))
 }
 
 data <- cbind(annot, t(exp))
@@ -143,10 +133,30 @@ training <- cbind("expression_subtype"=training[,1], predict(norm.prep, training
 testing <- cbind("expression_subtype"=testing[,1], predict(norm.prep, testing[,-1]))
 
 es.rf.reg <- randomForest(expression_subtype ~ ., data = training, importance = TRUE, ntree = 500)
+es.rf.cv <- train(
+  expression_subtype ~ .,
+  data = rbind(training),
+  importance = T,
+  ntree = 500,
+  method = "rf",
+  trControl = trainControl(method = "cv", number = 5)
+)
+
 es.mult.reg <- multinom(expression_subtype ~ ., data = training)
+es.mult.cv <- train(
+  expression_subtype ~ .,
+  data = rbind(training),
+  importance = T,
+  ntree = 500,
+  method = "multinom",
+  trControl = trainControl(method = "cv", number = 5)
+)
 
 es.rf.pred <- predict(es.rf.reg, testing[,-1])
+es.rf.cvpred <- predict(es.rf.cv, testing[,-1])
+
 es.mult.pred <- predict(es.mult.reg, testing[,-1])
+es.mult.cvpred <- predict(es.mult.cv, testing[,-1])
 
 ggplot() +
   geom_bar(aes(x=es.rf.pred), color="black", fill="white") +
@@ -154,8 +164,18 @@ ggplot() +
   theme_bw()
 
 ggplot() +
+  geom_bar(aes(x=es.rf.cvpred), color="black", fill="white") +
+  labs(title="Distribution in 5-fold cross-validated Random Forest Prediction") +
+  theme_bw()
+
+ggplot() +
   geom_bar(aes(x=es.mult.pred), color="black", fill="white") +
   labs(title="Distribution in Multinomial Logistic Prediction") +
+  theme_bw()
+
+ggplot() +
+  geom_bar(aes(x=es.mult.cvpred), color="black", fill="white") +
+  labs(title="Distribution in 5-fold cross-validated Multinomial Logistic Prediction") +
   theme_bw()
 
 ggplot() +
