@@ -154,6 +154,19 @@ ggplot(top_5_expression_long, aes(x = subtype, y = expr, fill = subtype)) +
 top_30_cor = exp_df[,which(rank(BH_DGE_df$minimum)<31)] %>% cor(method = "spearman")
 pheatmap(top_30_cor, main = "Correlation among the Top 30 differentially expressed genes")
 
-DEG_full_exp = as.data.frame(expression_data) %>% column_to_rownames(colnames(expression_data)[1]) %>% .[expression_data[[1]] %in% unique(top_DEGs),]
+DEG_full_exp = as.data.frame(expression_data) %>% column_to_rownames(colnames(expression_data)[1]) %>% .[expression_data[[1]] %in% unique(top_DEGs),] %>% t() %>% as.data.frame()
+Cont_clin_vars = anot_df[c(4,11,12,20,21)]
+Cont_clin_vars = Cont_clin_vars[complete.cases(Cont_clin_vars),]
 
 
+rownames(DEG_full_exp) %in% rownames(Cont_clin_vars)
+
+
+
+cor_genes_clin = function(gene_exp, clin_vars) {
+  dat = cbind(gene_exp,clin_vars)
+  corr = cor(dat)
+  m = ncol(gene_exp)
+  n = ncol(Cont_clin_vars)
+  corr[1:m, (m + 1):(m + n)]
+}
