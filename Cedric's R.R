@@ -123,11 +123,11 @@ unique(top_DEGs) %>% sort() %>% .[which(as.vector(table(top_DEGs))>1)]
 #Both of these are repeated twice. We will simply make a heatmap of the 49 unique DEGs among the 3 top 18 lists.
 
 #Select top 49 genes
-expression_of_DEGs = as.data.frame(expression_data) %>% column_to_rownames(colnames(expression_data)[1]) %>% .[expression_data[[1]] %in% unique(top_DEGs),] %>% .[which(!is.na(luad_anot_clean$paper_expression_subtype))]
+DEG_st_exp = as.data.frame(expression_data) %>% column_to_rownames(colnames(expression_data)[1]) %>% .[expression_data[[1]] %in% unique(top_DEGs),which(!is.na(luad_anot_clean$paper_expression_subtype))]
 #Select desired annotation columns
 DEG_anot = as.data.frame(luad_anot_clean) %>% column_to_rownames(colnames(luad_anot_clean)[1]) %>% select(paper_expression_subtype,ajcc_pathologic_stage,paper_Smoking.Status) %>% .[which(!is.na(luad_anot_clean$paper_expression_subtype)),]
 #Heatmap with annotation
-pheatmap(t(expression_of_DEGs), show_colnames = FALSE, show_rownames = FALSE, annotation_row = DEG_anot)
+pheatmap(t(DEG_st_exp), show_colnames = FALSE, show_rownames = FALSE, annotation_row = DEG_anot)
 
 #Select top 5 DEGs across all subtypes
 BH_DGE_df = BH_DGE_df %>% mutate(minimum = apply(BH_DGE_df, MARGIN = 1, FUN = function(x) min(x)))
@@ -153,3 +153,7 @@ ggplot(top_5_expression_long, aes(x = subtype, y = expr, fill = subtype)) +
 #Correlation Matrix for top 30 DEGs
 top_30_cor = exp_df[,which(rank(BH_DGE_df$minimum)<31)] %>% cor(method = "spearman")
 pheatmap(top_30_cor, main = "Correlation among the Top 30 differentially expressed genes")
+
+DEG_full_exp = as.data.frame(expression_data) %>% column_to_rownames(colnames(expression_data)[1]) %>% .[expression_data[[1]] %in% unique(top_DEGs),]
+
+
