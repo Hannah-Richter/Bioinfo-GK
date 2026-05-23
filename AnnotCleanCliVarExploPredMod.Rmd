@@ -109,16 +109,28 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 Rf and multinomial regressions for target 'expression_subtype'
 
 ```{r, echo=T}
-data_splitter <- function(data, target, split=0.7, include.healthy=F, top.var.cutoff=50, annot.cols=21) {
+straight_data_splitter <- function(top.var, split) {
+  if (is.numeric(split)) {
+    selector <- sample(rownames(top.var), floor(nrow(top.var)*split))
+    anti.selector <- rownames(top.var)[!{rownames(top.var) %in% selector}]
+    training <- top.var[selector,]; testing <- top.var[anti.selector,]
+    return(list(training,testing))
+  } else stop("Attempted to call straight_data_splitter with non-numeric split.")
+}
+
+cv_data_splitter <- function(top.var, split) {
+  tryCatch(expr={
+      split <- strsplit(split, "-")[2] %>% as.numeric()
+    }, error)
+}
+  
+data_splitter <- function(data, target, include.healthy=F, top.var.cutoff=50, annot.cols=21, split=0.7, cv=F) {
   if (!include.healthy) data <- data[data$is.tumour,]
   data <- data[!is.na(data[,target]),]
   data.dat <- data[,{annot.cols+1}:ncol(data)]
   top.var <- cbind(data[,target], data.dat[,names(sort(apply(data.dat, 2, var), decreasing=T)[1:top.var.cutoff])])
   colnames(top.var)[1] <- target
-  selector <- sample(rownames(top.var), floor(nrow(top.var)*split))
-  anti.selector <- rownames(top.var)[!{rownames(top.var) %in% selector}]
-  training <- top.var[selector,]; testing <- top.var[anti.selector,]
-  return(list(training,testing))
+  if (cv) return(cv_data_splitter(top.var, split)) else return(straight_data_splitter(top.var, split))
 }
 
 data <- cbind(annot, t(exp))
@@ -281,7 +293,7 @@ Confusion matrices
 for (i in c("ts.rf","ts.log")) {
   assign(paste0(i, ".con"), confusionMatrix(get(paste0(i, ".pred")), testing$Tumor.stage))
 }
-ts.knn.con <- confusionMatrix(ts.knn.pred, norm.testing$Tumor.stage)
+ts.knn.con <- confusionMatrix(ts.knn.pred, testing$Tumor.stage)
 ```
 
 AUC-ROC
