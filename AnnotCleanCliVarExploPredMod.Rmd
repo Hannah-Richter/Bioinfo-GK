@@ -56,7 +56,7 @@ NA_flattener <- function(data) {
   for (i in seq_along(data)) {
     data[tolower(data[[i]]) %in% c("[unknown]","[not available]"), i ] <- NA
   }
-  data
+  return(data)
 }
 
 NA_counter <- function(data, per_col=F) {
@@ -91,9 +91,26 @@ NA_counter(annot, T)
 From the head-call above, we know that all of the text columns are characters, even when a factor would be the more appropriate data type. We thus go through the cleaned annotation table and factorise, where appropriate.
 
 ```{r}
-for (i in colnames(annot)) { 
-  if ({length(unique(annot[,i])) <= 10} && {!is.numeric(annot[,i])} && {!is.logical(annot[,i])}) {annot[,i] <- annot[,i] %>% factor()}
+factor_numeriser <- function(annot) {
+  for (i in seq_along(annot)) {
+    if (!is.logical(annot[,i])) {
+      if (length(unique(annot[,i])) <= 10) {
+        annot[,i] <- annot[,i] %>% factor()
+      } else {
+        out <- tryCatch(
+          expr = {temp <- annot[,i] %>% {gsub(",", ".", .)} %>% as.numeric; annot[,i] <- temp},
+          warning = function(w) {print(i)},
+          error = function(e) {print(i)}
+        )
+      }
+    }
+  }
+  return(annot)
 }
+
+annot <- factor_numeriser(annot)
+
+for (i in seq_along(annot)) print(paste0("Class of column ", i, ": ", class(annot[,i])))
 ```
 
 We know from the documentation of the data ({{SOURCE}}), that the leading numbers of the fourth segment tell us whether the sample is a tumour or not. We use this to encode a new column entitled 'is.tumour' storing that information. Since this segment only has the values of '01' and '11', and since '11' codes for healthy tissue and '01' for tumour tissue, a boolean suffices.
