@@ -20,7 +20,7 @@ luad_anot_clean %>%
          filter(!is.na(paper_Age.at.diagnosis)) %>% 
          ggplot(aes(x = paper_Age.at.diagnosis)) +
          geom_histogram()
-#patients are between 41 and 85 years old
+
 mean(luad_anot_clean$paper_Age.at.diagnosis, na.rm = TRUE)
 median(luad_anot_clean$paper_Age.at.diagnosis, na.rm = TRUE)
 
