@@ -19,6 +19,7 @@ library(ggplot2)
 library(nnet)
 library(caret)
 library(pROC)
+library(pheatmap)
 
 set.seed(3259) # primes are beautiful
 
@@ -91,16 +92,19 @@ NA_counter(annot, T)
 From the head-call above, we know that all of the text columns are characters, even when a factor would be the more appropriate data type. We thus go through the cleaned annotation table and factorise, where appropriate.
 
 ```{r}
-factor_numeriser <- function(annot) {
+factor_numeriser <- function(annot, verbose=F) {
+  throw.warning <- warning(paste0("Coercion to numeric failed in column ", i, ". Returning unchanged column."))
   for (i in seq_along(annot)) {
     if (!is.logical(annot[,i])) {
       if (length(unique(annot[,i])) <= 10) {
         annot[,i] <- annot[,i] %>% factor()
       } else {
-        out <- tryCatch(
-          expr = {temp <- annot[,i] %>% {gsub(",", ".", .)} %>% as.numeric; annot[,i] <- temp},
-          warning = function(w) {print(i)},
-          error = function(e) {print(i)}
+        
+        tryCatch(
+          expr = {
+            temp <- annot[,i] %>% {gsub(",", ".", .)} %>% as.numeric
+            annot[,i] <- temp
+          }, warning = function(w) {if (verbose) throw.warning}, error = function(e) {if (verbose) throw.warning}
         )
       }
     }
@@ -137,7 +141,7 @@ data_splitter <- function(data, target, include.healthy=F, top.var.cutoff=50, an
     anti.selector <- rownames(top.var)[!{rownames(top.var) %in% selector}]
     training <- top.var[selector,]; testing <- top.var[anti.selector,]
     return(list(training,testing))
-  } else stop("Attempted to call straight_data_splitter with non-numeric split.")
+  } else stop("Attempted to call data_splitter with non-numeric split.")
 }
 
 data <- cbind(annot, t(exp))

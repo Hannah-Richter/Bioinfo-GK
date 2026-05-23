@@ -5,8 +5,69 @@ date: "`r Sys.Date()`"
 output: pdf_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=F, echo=F}
 knitr::opts_chunk$set(echo = F, include = F) # All chunks in need of output need to manually be set to echo = T
+
+library(tidyverse)
+library(dplyr)
+library(randomForest)
+library(ggplot2)
+library(nnet)
+library(caret)
+library(pROC)
+library(pheatmap)
+
+set.seed(3259) # primes are beautiful
+
+rm(list=ls())
+
+load("LUAD_data.RData")
+
+NA_flattener <- function(data) {
+  for (i in seq_along(data)) {
+    data[tolower(data[[i]]) %in% c("[unknown]","[not available]"), i ] <- NA
+  }
+  return(data)
+}
+
+NA_counter <- function(data, per_col=F) {
+  s <- apply(data, 2, function(k) sum(is.na(k)))
+  if (per_col) return(s) else return (sum(s))
+}
+
+factor_numeriser <- function(annot, verbose=F) {
+  throw.warning <- warning(paste0("Coercion to numeric failed in column ", i, ". Returning unchanged column."))
+  for (i in seq_along(annot)) {
+    if (!is.logical(annot[,i])) {
+      if (length(unique(annot[,i])) <= 10) {
+        annot[,i] <- annot[,i] %>% factor()
+      } else {
+        
+        tryCatch(
+          expr = {
+            temp <- annot[,i] %>% {gsub(",", ".", .)} %>% as.numeric
+            annot[,i] <- temp
+          }, warning = function(w) {if (verbose) throw.warning}, error = function(e) {if (verbose) throw.warning}
+        )
+      }
+    }
+  }
+  return(annot)
+}
+
+data_splitter <- function(data, target, include.healthy=F, top.var.cutoff=50, annot.cols=21, split=0.7) {
+  if (is.numeric(split)) {
+    if (!include.healthy) data <- data[data$is.tumour,]
+    data <- data[!is.na(data[,target]),]
+    data.dat <- data[,{annot.cols+1}:ncol(data)]
+    top.var <- cbind(data[,target], data.dat[,names(sort(apply(data.dat, 2, var), decreasing=T)[1:top.var.cutoff])])
+    colnames(top.var)[1] <- target
+    selector <- sample(rownames(top.var), floor(nrow(top.var)*split))
+    anti.selector <- rownames(top.var)[!{rownames(top.var) %in% selector}]
+    training <- top.var[selector,]; testing <- top.var[anti.selector,]
+    return(list(training,testing))
+  } else stop("Attempted to call data_splitter with non-numeric split.")
+}
 ```
 
 # Introduction
@@ -37,20 +98,6 @@ length(grep("paper", colnames(annot)))
 
 As this also makes the 'paper_' prefix superfluous we strip it from the paper columns. Furthermore, we noticed textual NAs, which were entered into the data set as '[unknown]', '[not available]' and '[Not Available]'. We thus strip these and replace them by real NAs. We perform the same operation on the expression data, whilst we're at it. The paper_Tumor.stage column encodes the Ajcc pathological stage. Thus, we replaced it with the ajcc staging.
 
-```{r, echo=T}
-NA_flattener <- function(data) {
-  for (i in seq_along(data)) {
-    data[tolower(data[[i]]) %in% c("[unknown]","[not available]"), i ] <- NA
-  }
-  return(data)
-}
-
-NA_counter <- function(data, per_col=F) {
-  s <- apply(data, 2, function(k) sum(is.na(k)))
-  if (per_col) return(s) else return (sum(s))
-}
-```
-
 ```{r}
 colnames(annot) <- c(colnames(annot)[1], colnames(annot)[-1] %>% substring(7))
 annot$Tumor.stage <- luad_anot_clean$ajcc_pathologic_stage
@@ -74,29 +121,12 @@ NA_counter(annot)
 NA_counter(annot, T)
 ```
 
-From the head-call above, we know that all of the text columns are characters, even when a factor would be the more appropriate data type. We thus go through the cleaned annotation table and factorise, where appropriate.
+From the head-call above, we know that all of the text columns are characters, even when a factor would be the more appropriate data type. We thus go through the cleaned annotation table and factorise, where appropriate. Furthermore, we try to coerce each column to numeric type, accepting both the comma and period as decimal delimiters, and discard this coercion, when coercion fails. We double check, that we see the correct classes per column.
 
 ```{r}
-factor_numeriser <- function(annot) {
-  for (i in seq_along(annot)) {
-    if (!is.logical(annot[,i])) {
-      if (length(unique(annot[,i])) <= 10) {
-        annot[,i] <- annot[,i] %>% factor()
-      } else {
-        out <- tryCatch(
-          expr = {temp <- annot[,i] %>% {gsub(",", ".", .)} %>% as.numeric; annot[,i] <- temp},
-          warning = function(w) {print(i)},
-          error = function(e) {print(i)}
-        )
-      }
-    }
-  }
-  return(annot)
-}
-
 annot <- factor_numeriser(annot)
 
-for (i in seq_along(annot)) print(paste0("Class of column ", i, ": ", class(annot[,i])))
+for (i in seq_along(annot)) print(paste0("Class of ", colnames(annot)[i], ": ", class(annot[,i])))
 ```
 
 We know from the documentation of the data ({{SOURCE}}), that the leading numbers of the fourth segment tell us whether the sample is a tumour or not. We use this to encode a new column entitled 'is.tumour' storing that information. Since this segment only has the values of '01' and '11', and since '11' codes for healthy tissue and '01' for tumour tissue, a boolean suffices.
@@ -105,7 +135,7 @@ We know from the documentation of the data ({{SOURCE}}), that the leading number
 annot <- annot %>% mutate(is.tumour = substring(rownames(annot), 14, 15)=="01")
 ```
 
-With our annotation data (and incidentally also expression data) cleaned up and somewhat usable, we move on to the next step.
+With our annotation data (and incidentally also expression data) cleaned up and usable, we move on to the next step.
 
 # Data Exploration
 
@@ -140,6 +170,33 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 
 
 ## Based on Expression Data
+
+### Target: Expression Subtype
+
+First we initialise a mutable combined data set from our immutable annot and exp data sets, discard unnecessary annotation columns, and split the data into a training and testing data set. We also scale and centre both data sets based on the training data.
+
+```{r}
+data <- cbind(annot, t(exp))
+
+data <- data_splitter(data, "expression_subtype")
+training <- data[[1]]; testing <- data[[2]]
+
+norm.prep <- preProcess(training[, -1], method = c("center", "scale"))
+training <- cbind("expression_subtype"=training[,1], predict(norm.prep, training[,-1]))
+testing <- cbind("expression_subtype"=testing[,1], predict(norm.prep, testing[,-1]))
+```
+
+Using the scaled and centred training data, we then train randomForest and multinomial logistical regression models.
+
+```{r}
+es.rf.reg <- randomForest(expression_subtype ~ ., data = training, importance = TRUE, ntree = 500)
+es.mult.reg <- multinom(expression_subtype ~ ., data = training)
+```
+
+
+
+
+### Target: Expression Subtype
 
 
 
