@@ -100,7 +100,7 @@ permutation_importance <- function(reg, data, target, metric={function(truth, pr
     for (r in seq_len(n_repeats)) {
       x_perm <- x
       x_perm[[j]] <- sample(x_perm[[j]])
-      perm_data <- cbind(x_perm, y = y)
+      perm_data <- cbind(x_perm, y=y)
       names(perm_data)[ncol(perm_data)] <- target
       perm_pred <- predict(reg, newdata = perm_data)
       perm_score <- metric(y, perm_pred)
@@ -108,7 +108,7 @@ permutation_importance <- function(reg, data, target, metric={function(truth, pr
     }
     res$importance[j] <- mean(drops)
   }
-  res[order(-res$importance), ]
+  res$feature[order(-abs(res$importance))]
 }
 
 variable_importance <- function(data, mode) {
@@ -400,6 +400,7 @@ ts.knn.imp <- permutation_importance(
   ts.knn.reg, data = testing, target="Tumor.stage")
 
 imp_integrater(ts.rf.imp, ts.log.imp)
+imp_integrater(ts.rf.imp, ts.knn.imp)
 ```
 
 
