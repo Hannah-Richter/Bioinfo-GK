@@ -390,7 +390,7 @@ q.norm.exp = quantile_normaliser(exp)
 q.norm.test = normality_test(q.norm.exp)
 
 hist(q.norm.test$`p-values`,breaks=20, main = "Shapiro-Wilks test results of quantile normalised expression", xlab = "p-values", ylab = "Counts")
-print(paste0("Percentage of genes with a p-values lower than 0.05: ", signif(sum(q.norm.test<0.05)/length(norm.test$`p-values`), 3)))
+print(paste0("Percentage of genes with a p-values lower than 0.05: ", signif(sum(q.norm.test<0.05)/length(q.norm.test$`p-values`), 3)))
 ```
 We can redo the QQ-plots for the same genes to see what changed.
 

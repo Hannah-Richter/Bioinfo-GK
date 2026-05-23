@@ -194,6 +194,92 @@ down_sampler <- function(data, target) {
   out <- out[,which(colnames(out)!="Class")]
   out
 }
+
+normality_test = function(exp_df) {
+  test.results = apply(exp_df, MARGIN = 1, function(x) shapiro.test(x))
+  p.values = vector()
+  for(i in seq_along(test.results)) {
+    p.values[i] = test.results[[i]]$p.value
+  }
+  results = data.frame(p.values)
+  colnames(results) = c("p-values")
+  rownames(results) = rownames(df)
+  return(results)
+}
+
+qq_plotter_5 = function(exp,gene.list,given.title="Title") {
+  t.exp = t(exp)
+  result = ggplot(t.exp) +
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[1]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[2]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[3]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[4]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[5]])))+
+    labs(title = given.title)
+  return(result)
+}
+
+quantile_normaliser = function(exp.df) {
+  #Compute ranks of genes
+  rnks = apply(exp.df, 2, rank, ties.method = "min")
+  #Sort expression values
+  srt.exp = apply(exp, 2, sort)
+  #Calculate row averages
+  rnk.means = rowMeans(srt.exp)
+  #Replace ranks of ins rnk with respective rank means
+  norm.exp = as.data.frame(matrix(rnk.means[rnks], ncol=ncol(rnks)))
+  #Row and column names
+  rownames(norm.exp) = rownames(exp.df)
+  colnames(norm.exp) = colnames(exp.df)
+  return(norm.exp)
+}
+
+DGE_analyser = function(exp.df, sample.groups, correction = T) {
+  groups = levels(sample.groups)
+  genes = rownames(exp.df)
+  clean.exp = exp.df[sample.groups %in% groups] %>%
+    t() %>%
+    as.data.frame()
+  clean.groups = sample.groups[sample.groups %in% groups]
+  
+  results = data.frame(matrix(NA, nrow = length(genes), ncol = length(groups)))
+  rownames(results) = genes
+  colnames(results) = groups
+  
+  for (group in groups){
+    not.group = groups[groups!=group]
+    for (gene in genes) {
+      exp.vals = clean.exp[gene]
+      in.group = exp.vals[which(clean.groups == group),]
+      out.group = exp.vals[which(clean.groups %in% not.group),]
+      test = wilcox.test(in.group,out.group,alternative = "two.sided")
+      results[gene, group] = test$p.value 
+    }
+  }
+  
+  if (correction == T){
+    results = flatten(results) %>% p.adjust("BH") %>% matrix(ncol = length(groups)) %>% as.data.frame(row.names = genes)
+    colnames(results) = groups
+  }
+  return(results)
+}
+
+top_gene_picker = function(dge.df, top = 10) {
+  dge.df = dge.df %>% mutate(minimum = apply(dge.df, MARGIN = 1, FUN = function(x) min(x)))
+  result = rownames(dge.df)[which(rank(dge.df$minimum, ties.method="random")<{top+1})]
+  return(result)
+}
+
+exp_clin_correlater = function(exp, annot){
+  selector = vector(length=ncol(annot))
+  for (i in seq_along(selector)) selector[i] = is.numeric(annot[,i])
+  numeric.annot = annot[, selector]
+  complete.numeric.annot = numeric.annot[complete.cases(numeric.annot),]
+  selected.exp = exp[rownames(exp) %in% rownames(complete.numeric.annot),]
+  combined = cbind(selected.exp, complete.numeric.annot)
+  corr = cor(combined)
+  result = corr[1:ncol(selected.exp), (ncol(selected.exp) + 1):(ncol(selected.exp) + ncol(complete.numeric.annot))]
+}
 ```
 
 # Introduction
@@ -281,7 +367,43 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 
 ## Expression Data
 
+We first aim to assess the normality of the gene expression data. As we have 3000 different genes, analysing a histogram or QQ-plot for each one is not feasible. Instead we perform Shapiro-Wilks tests for each gene across the 455 samples. We can then plot a histogram of p-values to roughly ascertain the normality across different genes and we can calculate that only ~82% of genes gave a p-value lower than 0.05.
 
+```{r, include=T}
+norm.test = normality_test(exp)
+
+hist(norm.test$`p-values`,breaks=20, main = "Histogram of p-values from Shapiro-Wilks normality test", xlab = "p-values", ylab = "Counts")
+
+print(paste0("Percentage of genes with a p-values lower than 0.05: ", signif(sum(norm.test<0.05)/length(norm.test$`p-values`), 3)))
+
+```
+For better insight we select some genes with high and some with low p-values and make QQ-plots on these.
+
+```{r, include=T}
+low.norm.genes = which(rank(norm.test)<=5)
+high.norm.genes = which(rank(norm.test)>{max(rank(norm.test))-5})
+
+qq_plotter_5(exp,low.norm.genes,"Low normality genes")
+qq_plotter_5(exp,high.norm.genes, "High normality genes")
+
+```
+
+Next, we perform quantile normalisation of the gene expression data. The Shapiro-Wilks test now yields only ~77% of genes with a p-value lower than 0.05. 
+
+```{r, include=T}
+q.norm.exp = quantile_normaliser(exp)
+q.norm.test = normality_test(q.norm.exp)
+
+hist(q.norm.test$`p-values`,breaks=20, main = "Shapiro-Wilks test results of quantile normalised expression", xlab = "p-values", ylab = "Counts")
+print(paste0("Percentage of genes with a p-values lower than 0.05: ", signif(sum(q.norm.test<0.05)/length(q.norm.test$`p-values`), 3)))
+```
+We can redo the QQ-plots for the same genes to see what changed. The distributions look similar, but Sahpiro-Wilks testing shows generally lower normality. Because of this, we utilise non-quantile-normalised expression values
+
+```{r, include=T}
+qq_plotter_5(q.norm.exp,low.norm.genes,"Low normality genes after quantile normalisation")
+qq_plotter_5(q.norm.exp,high.norm.genes,"High normality genes after quantile normalisation")
+
+```
 
 # Data Analysis
 
@@ -293,11 +415,76 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 
 ## Differential Expression Analysis
 
+We now set out to perform differential expression analysis between the different tumour subtypes. After Benjamini-Hochberg correction, we visualise the Top 50 most significant differentially expressed genes in a heatmap.
 
+```{r, include=T}
+st.DGE = DGE_analyser(exp,annot$expression_subtype)
+
+top.50.genes = top_gene_picker(st.DGE,50)
+
+top.50.exp = exp[which(rownames(exp) %in% top.50.genes),which(!is.na(annot$expression_subtype))] %>%
+  t()
+top.50.anot = annot %>%
+  select(expression_subtype,Tumor.stage,Smoking.Status) %>%
+  .[which(!is.na(luad_anot_clean$paper_expression_subtype)),]
+colnames(top.50.anot) = c("Expression Subtype","Tumour Stage", "Smoking Status")
+
+pheatmap(top.50.exp,show_rownames = FALSE, show_colnames = FALSE, annotation_row = top.50.anot, main = "Expression heatmap of the TOP 50 DEGs across subtypes", annotation_names_row = FALSE)
+
+```
+
+We then compare the top 5 DEGs using a boxplot. TRU seems to be the more clearly differentiated subtype compared to prox.-inflam. and prox.-prolif.. Most of the genes are well known in tumour research, namely KPNA2, NFIX, RASGRF1 and, TPX2. ADH1B is less strongly associated with tumours, yet some finding do link it to reduced tumour stemness.
+
+```{r, include=T}
+top.5.genes = top_gene_picker(st.DGE,5)
+top.5.exp = exp[which(rownames(exp) %in% top.5.genes),] %>%
+  t()
+top.5.annotated = top.5.exp %>%
+  as.data.frame() %>%
+  mutate(subtype=annot$expression_subtype)
+
+top.5.long = top.5.annotated %>% rownames_to_column(var = "Sample ID") %>% pivot_longer(cols = c(colnames(top.5.annotated)[1:5]), names_to = "gene", values_to = "expr")
+
+ggplot(top.5.long, aes(x = subtype, y = expr, fill = subtype)) +
+  geom_boxplot() +
+  facet_wrap(~gene) +
+  labs(x = "Subtype", y = "Expression") +
+  theme_bw()
+```
 
 ## Expression Correlation amongst Highly Differentially Expressed Genes
 
+We can also compare the correlation between top DEGs to find co-expressed or anti-expressed modules. There seems to be some genes which are in co-expressed and a separate module which seems inversely correlated.
 
+```{r, include=T}
+top.30.genes = top_gene_picker(st.DGE,30)
+top.30.exp = exp[which(rownames(exp) %in% top.30.genes),] %>%
+  t()
+
+top.30.cor = cor(top.30.exp, method = "spearman")
+
+pheatmap(top.30.cor, main = "Correlation among the Top 30 differentially expressed genes", show_rownames = TRUE, show_colnames = FALSE)
+```
+
+Furthermore, we want to compare the top 30 DEGs to clinical feature. For this, we compute the correlation between continous clincial variables and the top 30 DEGs.
+
+```{r, include=T}
+cor.mat.clin.exp = exp_clin_correlater(top.30.exp,annot)
+colnames(cor.mat.clin.exp) = c("Age at diagnosis","Non Silent Mutations", "Non Silent Mutations per Mb", "Ploidy", "Purity")
+
+pheatmap(cor.mat.clin.exp, treeheight_row = 0, treeheight_col = 0)
+```
+
+Finally, with respect to the differential gene expression, we want to ascertain how top 30 DEG expression differs between tumour stages. Curiously, many of the top DEGs are differentially expressed only in Stage IA vs. rest
+
+```{r, include=T}
+t.top.30.exp.df = t(top.30.exp) %>%
+  as.data.frame()
+tumour.stage.DGE.30 = DGE_analyser(t.top.30.exp.df,annot$Tumor.stage)
+
+pheatmap(tumour.stage.DGE.30, cluster_cols = FALSE, cluster_rows = TRUE, treeheight_row = 0, main = "Q-Values of Top 30 genes compared across Subtypes")
+
+```
 
 # Predictive Modelling
 
