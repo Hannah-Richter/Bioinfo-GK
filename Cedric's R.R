@@ -51,10 +51,38 @@ ggplot(t_expression_data) +
 norm_test = expression_data[-1] %>% apply(MARGIN = 1, function(x) shapiro.test(x))
 
 #Extract p-values from "Shapiro Test" Object and add to list; plot into histogram
-Shapiro_p_values = list()
+Shapiro_p_values = vector()
 for(i in 1:length(norm_test)) Shapiro_p_values[i]= norm_test[[i]]$p.value
-Shapiro_p_values %>% unlist(use.names = FALSE) %>% hist(,breaks=20)
+Shapiro_p_values %>% hist(,breaks=20)
 
+
+low_norm_genes = which(rank(Shapiro_p_values)<=5)
+medium_norm_genes = which(rank(Shapiro_p_values) %in% seq(1500,1504))
+high_norm_genes = which(rank(Shapiro_p_values)>{max(rank(Shapiro_p_values))-5})
+
+
+t_expression_data= t(column_to_rownames(expression_data, "gene")) %>% as.data.frame() %>% rownames_to_column(.,"patient") %>% tibble()
+
+ggplot(t_expression_data) +
+  geom_qq(aes(sample = get(colnames(t_expression_data)[high_norm_genes[1]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[high_norm_genes[2]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[high_norm_genes[3]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[high_norm_genes[4]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[high_norm_genes[5]])))
+
+ggplot(t_expression_data) +
+  geom_qq(aes(sample = get(colnames(t_expression_data)[medium_norm_genes[1]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[medium_norm_genes[2]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[medium_norm_genes[3]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[medium_norm_genes[4]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[medium_norm_genes[5]])))
+
+ggplot(t_expression_data) +
+  geom_qq(aes(sample = get(colnames(t_expression_data)[low_norm_genes[1]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[low_norm_genes[2]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[low_norm_genes[3]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[low_norm_genes[4]])))+
+  geom_qq(aes(sample = get(colnames(t_expression_data)[low_norm_genes[5]])))
 
 #Percentage of Shapiro-Wilk Tests whith p smaller 0.05
 sum(Shapiro_p_values < 0.05)/length(Shapiro_p_values)
@@ -73,6 +101,14 @@ norm_expression = as.data.frame(matrix(ranked_means[ranks], ncol=ncol(ranks)))
 #Add row- and colnames
 rownames(norm_expression) = expression_data[[1]]
 colnames(norm_expression) = colnames(expression_data[-1])
+
+ggplot({t(norm_expression)}) +
+  geom_qq(aes(sample = get(colnames({t(norm_expression)})[low_norm_genes[1]])))+
+  geom_qq(aes(sample = get(colnames({t(norm_expression)})[low_norm_genes[2]])))+
+  geom_qq(aes(sample = get(colnames({t(norm_expression)})[low_norm_genes[3]])))+
+  geom_qq(aes(sample = get(colnames({t(norm_expression)})[low_norm_genes[4]])))+
+  geom_qq(aes(sample = get(colnames({t(norm_expression)})[low_norm_genes[5]])))
+
 
 #Compare Shapiro-Wilks test
 norm_test_normalised = norm_expression %>% apply(MARGIN = 1, function(x) shapiro.test(x))
@@ -134,9 +170,9 @@ pheatmap(t(DEG_st_exp), show_colnames = FALSE, show_rownames = FALSE, annotation
 #Select top 5 DEGs across all subtypes
 BH_DGE_df = BH_DGE_df %>% mutate(minimum = apply(BH_DGE_df, MARGIN = 1, FUN = function(x) min(x)))
 #Select only those 5 genes and only the samples for which we know expression subtypes
-top_5_expression = exp_df[,which(rank(BH_DGE_df$minimum)<6)] %>% as.data.frame() %>% mutate(subtype=luad_anot_clean$paper_expression_subtype)
+top_5_subtype = exp_df[,which(rank(BH_DGE_df$minimum)<6)] %>% as.data.frame() %>% mutate(subtype=luad_anot_clean$paper_expression_subtype)
 #top_5_expression = exp_df[which(!is.na(luad_anot_clean$paper_expression_subtype)),which(rank(BH_DGE_df$minimum)<6)] %>% as.data.frame() %>% mutate(subtype=DEG_anot$paper_expression_subtype)
-top_5_expression_long = top_5_expression %>% rownames_to_column(var = "Sample ID") %>% pivot_longer(cols = c(colnames(top_5_expression)[1:5]), names_to = "gene", values_to = "expr")
+top_5_expression_long = top_5_subtype %>% rownames_to_column(var = "Sample ID") %>% pivot_longer(cols = c(colnames(top_5_subtype)[1:5]), names_to = "gene", values_to = "expr")
 
 ggplot(top_5_expression_long, aes(x = subtype, y = expr, fill = subtype)) +
   geom_boxplot() +
@@ -190,4 +226,40 @@ cor_genes_clin = function(gene_exp, clin_vars) {
 }
 
 cor_genes_clin(exp_for_cor, Cont_clin_vars) %>% pheatmap()
+
+
+
+#DEGs and tumour stage
+
+#We'll use the top 3 DEGs
+
+top_30_DEG = exp_df[,which(rank(BH_DGE_df$minimum)<31)] %>% as.data.frame()
+sample_stage = factor_numeriser(anot_df)$ajcc_pathologic_stage
+stages = levels(sample_stage) %>% as.vector()
+
+#Prepare results data frame with all the genes and stages to be tested vs. rest
+top_30_sample_df = data.frame(matrix(NA, nrow = ncol(top_30_DEG), ncol = n_distinct(stages)))
+rownames(top_30_sample_df) = colnames(top_30_DEG)
+colnames(top_30_sample_df) = stages
+
+
+#Run a Wilcox test for each stage vs rest across each gene and save p-value of the test into result dataframe
+for (stage in stages){
+  not_stage = stages[stages != stage]
+  for (gene in colnames(top_30_DEG)) {
+    exp_vals = top_30_DEG[[gene]]
+    in_group = exp_vals[which(sample_stage == stage)]
+    out_group = exp_vals[which(sample_stage %in% not_stage)]
+    temporary_test_result = wilcox.test(in_group,out_group,alternative = "two.sided")
+    top_30_sample_df[gene,stage] = temporary_test_result$p.value
+  }
+}
+
+#BH correction
+BH_top_30_sample = flatten(top_30_sample_df) %>% p.adjust("BH") %>% matrix(ncol = n_distinct(sample_stage)) %>% as.data.frame(row.names = colnames(top_30_DEG))
+colnames(BH_top_30_sample) = stages
+
+pheatmap(BH_top_30_sample, cluster_cols = FALSE, cluster_rows = TRUE, main = "Q-Values of Top 30 genes compared across Subtypes")
+
+
 
