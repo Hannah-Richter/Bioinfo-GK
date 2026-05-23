@@ -202,6 +202,17 @@ normality_test = function(exp_df) {
   return(results)
 }
 
+qq_plotter_5 = function(exp,gene.list,given.title="Title") {
+  t.exp = t(exp)
+  result = ggplot(t.exp) +
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[1]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[2]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[3]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[4]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[5]])))+
+    labs(title = given.title)
+  return(result)
+}
 
 quantile_normaliser = function(exp.df) {
   #Compute ranks of genes
@@ -366,19 +377,6 @@ For better insight we select some genes with high and some with low p-values and
 ```{r}
 low.norm.genes = which(rank(norm.test)<=5)
 high.norm.genes = which(rank(norm.test)>{max(rank(norm.test))-5})
-
-
-qq_plotter_5 = function(exp,gene.list,given.title="Title") {
-  t.exp = t(exp)
-  result = ggplot(t.exp) +
-    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[1]])))+
-    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[2]])))+
-    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[3]])))+
-    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[4]])))+
-    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[5]])))+
-    labs(title = given.title)
-  return(result)
-}
 
 qq_plotter_5(exp,low.norm.genes,"Low normality genes")
 qq_plotter_5(exp,high.norm.genes, "High normality genes")
