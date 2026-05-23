@@ -93,18 +93,19 @@ From the head-call above, we know that all of the text columns are characters, e
 
 ```{r}
 factor_numeriser <- function(annot, verbose=F) {
-  throw.warning <- warning(paste0("Coercion to numeric failed in column ", i, ". Returning unchanged column."))
   for (i in seq_along(annot)) {
     if (!is.logical(annot[,i])) {
       if (length(unique(annot[,i])) <= 10) {
         annot[,i] <- annot[,i] %>% factor()
       } else {
-        
+        warning.message <- paste0("Coercion to numeric failed in column ", i, ". Returning unchanged column.")
         tryCatch(
           expr = {
             temp <- annot[,i] %>% {gsub(",", ".", .)} %>% as.numeric
             annot[,i] <- temp
-          }, warning = function(w) {if (verbose) throw.warning}, error = function(e) {if (verbose) throw.warning}
+          },
+          warning = function(w) {if (verbose) warning(warning.message)},
+          error = function(e) {if (verbose) warning(warning.message)}
         )
       }
     }
@@ -341,7 +342,7 @@ AUC-ROC
 
 ```{r, echo=T}
 roc_plotter <- function (reg, truth, title) {
-  roc <- roc(response=testing[,1], predictor=predict(reg, testing[,-1]), levels=c("Early","Late"))
+  roc <- roc(response=testing[,1], predictor=predict(reg, testing[,-1]), levels=c("Early","Late"), direction="<")
   legname <- roc$levels; legname <- paste0(legname[1],"/",legname[2])
   plot(roc, col = "red", main = title, lwd = 2)
   legend("bottomright", legend = legname, col="red", lwd=2)
@@ -356,7 +357,6 @@ Var Importance
 ```{r, echo=T}
 ts.rf.imp <- abs_imper(ts.rf.reg, mode="rf") %>% sort(., T) %>% names()
 ts.log.imp <- abs_imper(ts.log.reg, mode="binom") %>% sort(., T) %>% names()
-ts.rf.imp[ts.rf.imp %in% ts.log.imp]
 
 imp_integrater(ts.rf.imp, ts.log.imp)
 ```
