@@ -1,0 +1,618 @@
+---
+title: "Differential Gene Expression"
+output: pdf_document
+date: "2026-05-23"
+---
+
+```{r setup, include=F, echo=F}
+knitr::opts_chunk$set(echo = F, include = F) # All chunks in need of output need to manually be set to echo = T
+
+library(tidyverse)
+library(dplyr)
+library(randomForest)
+library(ggplot2)
+library(nnet)
+library(caret)
+library(pROC)
+library(pheatmap)
+
+set.seed(3259) # primes are beautiful
+
+rm(list=ls())
+
+load("LUAD_data.RData")
+
+NA_flattener <- function(data) {
+  for (i in seq_along(data)) {
+    data[tolower(data[[i]]) %in% c("[unknown]","[not available]"), i ] <- NA
+  }
+  return(data)
+}
+
+NA_counter <- function(data, per_col=F) {
+  na.counter <- data.frame(
+    "column"=colnames(data),
+    "NA.count"=vector(length=ncol(data)))
+  for (i in seq_along(data)) {
+    na.counter[i,2] <- sum(is.na(data[,i]))
+  }
+  if (per_col) return(na.counter) else return (sum(na.counter[,2]))
+}
+
+factor_numeriser <- function(annot, verbose=F) {
+  for (i in seq_along(annot)) {
+    if (!is.logical(annot[,i])) {
+      if (length(unique(annot[,i])) <= 10) {
+        annot[,i] <- annot[,i] %>% factor()
+      } else {
+        warning.message <- paste0(
+          "Coercion to numeric failed in column ",
+          i,
+          ". Returning unchanged column.")
+        tryCatch(
+          expr = {
+            temp <- annot[,i] %>% {gsub(",", ".", .)} %>% as.numeric
+            annot[,i] <- temp
+          },
+          warning = function(w) {if (verbose) warning(warning.message)},
+          error = function(e) {if (verbose) warning(warning.message)}
+        )
+      }
+    }
+  }
+  return(annot)
+}
+
+data_splitter <- function(data, target, include.healthy=F, top.var.cutoff=50, annot.cols=21, split=0.7) {
+  if (is.numeric(split)) {
+    if (!include.healthy) data <- data[data$is.tumour,]
+    data <- data[!is.na(data[,target]),]
+    data.dat <- data[,{annot.cols+1}:ncol(data)]
+    top.var <- cbind(
+      data[,target],
+      data.dat[,names(sort(apply(data.dat, 2, var), decreasing=T)[1:top.var.cutoff])])
+    colnames(top.var)[1] <- target
+    selector <- sample(rownames(top.var), floor(nrow(top.var)*split))
+    anti.selector <- rownames(top.var)[!{rownames(top.var) %in% selector}]
+    training <- top.var[selector,]; testing <- top.var[anti.selector,]
+    return(list(training,testing))
+  } else stop("Attempted to call data_splitter with non-numeric split.")
+}
+
+multi_roc_plotter <- function(reg, truth, title) {
+  rocs <- multiclass.roc(response = truth[,1], predictor = predict(reg, truth, type="prob"))$rocs
+  len <- length(rocs)
+  colours <- heat.colors(len)
+  plot(rocs[1][[1]][[1]], col=colours[1], main=title) 
+  for (i in 2:len) {lines(rocs[i][[1]][[1]], col=colours[i], lwd=2)}
+  legend("bottomright", legend = names(rocs), col=colours, lwd=2)
+}
+
+permutation_importance <- function(reg, data, target, metric={function(truth, pred) mean(truth == pred)}, maximize=T, n_repeats=10) {
+  y <- data[[target]]
+  x <- data[, setdiff(names(data), target), drop=F]
+  baseline_pred <- predict(reg, newdata = data)
+  baseline <- metric(y, baseline_pred)
+  res <- data.frame(feature=names(x), importance=NA_real_)
+  for (j in seq_along(x)) {
+    drops <- numeric(n_repeats)
+    for (r in seq_len(n_repeats)) {
+      x_perm <- x
+      x_perm[[j]] <- sample(x_perm[[j]])
+      perm_data <- cbind(x_perm, y = y)
+      names(perm_data)[ncol(perm_data)] <- target
+      perm_pred <- predict(reg, newdata = perm_data)
+      perm_score <- metric(y, perm_pred)
+      drops[r] <- if (maximize) baseline - perm_score else perm_score - baseline
+    }
+    res$importance[j] <- mean(drops)
+  }
+  res[order(-res$importance), ]
+}
+
+variable_importance <- function(data, mode) {
+  if (mode=="rf") {
+    imp.mat <- data[["importance"]]
+    imp <- vector(length=nrow(imp.mat))
+    for (i in seq_len(length(imp))) {
+      imp[i] <- abs(imp.mat[i, 2]-imp.mat[i, 1])
+    }
+    names(imp) <- rownames(imp.mat)
+  } else if (mode=="mult") {
+    imp.mat <- data %>% coef() %>% .[,-1]
+    imp <- vector(length=ncol(imp.mat))
+    for (i in seq_len(length(imp))) {
+      imp[i] <- sqrt(imp.mat[1, i]^2+imp.mat[2, i]^2)
+    }
+    names(imp) <- colnames(imp.mat)
+  } else if (mode=="binom") {
+    imp <- data[["coefficients"]] %>% .[-1]
+  } else stop("Error: Tried to call function with unknown mode.")
+  return(imp)
+}
+
+imp_integrater <- function(imp1, imp2, max.depth=50, integ.len=5) {
+  for (i in integ.len:max.depth) {
+    temp <- imp1[1:i]
+    integ <- temp[temp %in% imp2[1:i]]
+    if (length(integ)>=integ.len) break
+  }
+  integ <- na.omit(integ)
+  if (length(integ)<integ.len) warning(
+      paste0("Could only find ",
+        length(integ),
+        " overlaps at max depth of ",
+        max.depth,
+        "! Recommend to repeat call with higher max depth."
+    ))
+  integ <- list("important.variables"=integ, "depth"=i)
+  return(integ)
+}
+
+target_dualler <- function(data, target, first.group, boolean) {
+  x <- data[[target]]
+  first <- tolower(x) %in% tolower(first.group)
+  data[,target] <- ifelse(first, boolean[1], boolean[2]) %>% factor()
+  data
+}
+
+roc_plotter <- function (reg, truth, title) {
+  roc <- roc(
+    response=testing[,1], 
+    predictor=predict(reg, testing[,-1], type="response"), levels=c("Early","Late"), 
+    direction="<"
+  )
+  legname <- roc$levels; legname <- paste0(legname[1],"/",legname[2])
+  plot(roc, col = "red", main = title, lwd = 2)
+  legend("bottomright", legend = legname, col="red", lwd=2)
+}
+
+confusion_extracter <- function(con) {
+  Accuracy <- con$overall["Accuracy"]
+  if (length(dim(con$byClass))==2) {
+    F1 <- con$byClass[,"F1"] %>% mean()
+    Precisions <- con$byClass[,"Precision"]
+    Recalls <- con$byClass[,"Recall"]
+    res <- vector(length={2+nrow(con$byClass)*2})
+    res[1:2] <- c(Accuracy, F1); names(res)[1:2] <- c("Accuracy", "Macro-Averaged F1")
+    temp <- length(Precisions)
+    for (i in 1:temp) {
+      res[2+i] <- Precisions[i]; names(res)[2+i] <- paste("Precision for", names(Precisions)[i])
+      res[2+temp+i] <- Recalls[i]; names(res)[2+temp+i] <- paste("Recall for", names(Recalls)[i])
+    }
+    return(res)
+  } else {
+    F1 <- con$byClass["F1"]
+    Precision <- con$byClass["Precision"]
+    Recall <- con$byClass["Recall"]
+    return(c(Accuracy, F1, Precision, Recall))
+  }
+
+}
+
+normality_test = function(exp_df) {
+  test.results = apply(exp_df, MARGIN = 1, function(x) shapiro.test(x))
+  p.values = vector()
+  for(i in seq_along(test.results)) {
+    p.values[i] = test.results[[i]]$p.value
+  }
+  results = data.frame(p.values)
+  colnames(results) = c("p-values")
+  rownames(results) = rownames(df)
+  return(results)
+}
+
+
+quantile_normaliser = function(exp.df) {
+  #Compute ranks of genes
+  rnks = apply(exp.df, 2, rank, ties.method = "min")
+  #Sort expression values
+  srt.exp = apply(exp, 2, sort)
+  #Calculate row averages
+  rnk.means = rowMeans(srt.exp)
+  #Replace ranks of ins rnk with respective rank means
+  norm.exp = as.data.frame(matrix(rnk.means[rnks], ncol=ncol(rnks)))
+  #Row and column names
+  rownames(norm.exp) = rownames(exp.df)
+  colnames(norm.exp) = colnames(exp.df)
+  return(norm.exp)
+}
+
+
+DGE_analyser = function(exp.df, sample.groups, correction = T) {
+  groups = levels(sample.groups)
+  genes = rownames(exp.df)
+  clean.exp = exp.df[sample.groups %in% groups] %>% t() %>% as.data.frame()
+  clean.groups = sample.groups[sample.groups %in% groups]
+  
+  results = data.frame(matrix(NA, nrow = length(genes), ncol = length(groups)))
+  rownames(results) = genes
+  colnames(results) = groups
+  
+  for (group in groups){
+    not.group = groups[groups!=group]
+    for (gene in genes) {
+      exp.vals = clean.exp[gene]
+      in.group = exp.vals[which(clean.groups == group),]
+      out.group = exp.vals[which(clean.groups %in% not.group),]
+      test = wilcox.test(in.group,out.group,alternative = "two.sided")
+      results[gene, group] = test$p.value 
+    }
+  }
+  
+  if (correction){
+    results = flatten(results) %>% p.adjust("BH") %>% matrix(ncol = length(groups)) %>% as.data.frame(row.names = genes)
+    colnames(results) = groups
+  }
+  return(results)
+}
+
+top_gene_picker = function(dge.df, top = 10) {
+  dge.df = dge.df %>% mutate(minimum = apply(dge.df, MARGIN = 1, FUN = function(x) min(x)))
+  result = rownames(dge.df)[which(rank(dge.df$minimum, ties.method="random")<{top+1})]
+  return(result)
+}
+
+exp_clin_correlater = function(exp, annot){
+  selector = vector(length=ncol(annot))
+  for (i in seq_along(selector)) selector[i] = is.numeric(annot[,i])
+  numeric.annot = annot[, selector]
+  complete.numeric.annot = numeric.annot[complete.cases(numeric.annot),]
+  selected.exp = exp[rownames(exp) %in% rownames(complete.numeric.annot),]
+  combined = cbind(selected.exp, complete.numeric.annot)
+  corr = cor(combined)
+  result = corr[1:ncol(selected.exp), (ncol(selected.exp) + 1):(ncol(selected.exp) + ncol(complete.numeric.annot))]
+}
+
+```
+
+# Introduction
+
+
+
+# Loading and Cleaning of Annotation and Expression Data
+
+we want to clean up our annotation file. To do this we must first take a look at the file.
+
+```{r, echo=T}
+annot <- luad_anot_clean
+head(annot)
+```
+
+We can see here, that there are indeed values missing in a lot of the columns. Looking at the documentation for the data source ({{SOURCE}}), we can also see, that the first three segments = or the first 12 digits = of the barcode encode the patient ID. We thus replace paper_patient with the barcode trimmed to position 12.
+
+```{r}
+annot$paper_patient <- strtrim(annot$barcode, 12)
+```
+
+Since we only want the barcode and paper columns, we discard anything not matching to that selection. This leaves us with 20 paper columns.
+
+```{r}
+annot <- annot[, c("barcode", grep("^paper_", colnames(annot), value = TRUE))]
+length(grep("paper", colnames(annot)))
+```
+
+As this also makes the 'paper_' prefix superfluous we strip it from the paper columns. Furthermore, we noticed textual NAs, which were entered into the data set as '[unknown]', '[not available]' and '[Not Available]'. We thus strip these and replace them by real NAs. We perform the same operation on the expression data, whilst we're at it. The paper_Tumor.stage column encodes the Ajcc pathological stage. Thus, we replaced it with the ajcc staging.
+
+```{r}
+colnames(annot) <- c(colnames(annot)[1], colnames(annot)[-1] %>% substring(7))
+annot$Tumor.stage <- luad_anot_clean$ajcc_pathologic_stage
+annot <- NA_flattener(annot)
+annot %>% {NA_counter(., per_col=T)[which(colnames(annot)=="barcode"),]} # No NAs in barcode
+length(annot$barcode) == length(unique(annot$barcode)) # barcodes can function as unique keys 
+annot <- column_to_rownames(annot, "barcode") # Don't like tibbles and their zero-name convention nonsense
+
+exp <- luad_exp_clean
+exp <- NA_flattener(exp)
+exp %>% NA_counter() # No NAs in whole data set
+length(exp$gene) == length(unique(exp$gene)) # genes can functions as unique keys
+exp <- column_to_rownames(exp, "gene")
+```
+
+When looking at the counts of NAs, the expression data are complete, whilst the annotation data have 5623 NAs in total distributed relatively evenly across all columns, with patient and Tumor.stage being the exceptions.
+
+```{r, echo=T}
+NA_counter(exp)
+NA_counter(annot)
+NA_counter(annot, T)
+```
+
+From the head-call above, we know that all of the text columns are characters, even when a factor or numeric type would be more appropriate. We thus go through the cleaned annotation table and factorise, where appropriate. Furthermore, where factorisation is inappropriate, we try to coerce each column to numeric type (accepting both comma and period as decimal delimiters) and discard all failed coercions. Lastly, we double check, that we see the intuitively appropriate classes for each column.
+
+```{r, echo=T}
+annot <- factor_numeriser(annot)
+
+classes.vector <- vector(length = ncol(annot))
+classes <- data.frame("column"=classes.vector, "class"=classes.vector)
+
+for (i in seq_along(annot)) {
+  classes[i,1] <- colnames(annot)[i]
+  classes[i,2] <- class(annot[,i])
+}
+
+classes # could have been a vector, but legibility is better when a data frame.
+```
+
+We know from the documentation of the data ({{SOURCE}}), that the leading numbers of the fourth segment tell us whether the sample is a tumour or not. We use this to encode a new column entitled 'is.tumour' storing that information. Since this segment only has the values of '01' and '11', and since '11' codes for healthy tissue and '01' for tumour tissue, a boolean suffices.
+
+```{r}
+annot <- annot %>% mutate(is.tumour = substring(rownames(annot), 14, 15)=="01")
+```
+
+With our annotation data (and incidentally also expression data) cleaned up and usable, we move on to the next step.
+
+# Data Exploration
+
+
+
+## Clinical Annotation
+
+
+
+## Expression Data
+
+We first aim to assess the normality of the gene expression data. As we have 3000 different genes, analysing a histogram or QQ-plot for each one is not feasible. Instead we perform Shapiro-Wilks tests for each gene across the 455 samples. We can then plot a histogram of p-values to roughly ascertain the normality across different genes and we can calculate that only ~82% of genes gave a p-value lower than 0.05.
+
+```{r}
+norm.test = normality_test(exp)
+
+hist(norm.test$`p-values`,breaks=20, main = "Histogram of p-values from Shapiro-Wilks normality test", xlab = "p-values", ylab = "Counts")
+
+print(paste0("Percentage of genes with a p-values lower than 0.05: ", signif(sum(norm.test<0.05)/length(norm.test$`p-values`), 3)))
+
+```
+For better insight we select some genes with high and some with low p-values and make QQ-plots on these.
+
+```{r}
+low.norm.genes = which(rank(norm.test)<=5)
+high.norm.genes = which(rank(norm.test)>{max(rank(norm.test))-5})
+
+
+qq_plotter_5 = function(exp,gene.list,given.title="Title") {
+  t.exp = t(exp)
+  result = ggplot(t.exp) +
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[1]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[2]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[3]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[4]])))+
+    geom_qq(aes(sample = get(colnames(t.exp)[gene.list[5]])))+
+    labs(title = given.title)
+  return(result)
+}
+
+qq_plotter_5(exp,low.norm.genes,"Low normality genes")
+qq_plotter_5(exp,high.norm.genes, "High normality genes")
+
+```
+
+Next, we perform quantile normalisation of the gene expression data. The Shapiro-Wilks test now yields only ~77% of genes with a p-value lower than 0.05. 
+
+```{r}
+q.norm.exp = quantile_normaliser(exp)
+q.norm.test = normality_test(q.norm.exp)
+
+hist(q.norm.test$`p-values`,breaks=20, main = "Shapiro-Wilks test results of quantile normalised expression", xlab = "p-values", ylab = "Counts")
+print(paste0("Percentage of genes with a p-values lower than 0.05: ", signif(sum(q.norm.test<0.05)/length(norm.test$`p-values`), 3)))
+```
+We can redo the QQ-plots for the same genes to see what changed.
+
+```{r}
+qq_plotter_5(q.norm.exp,low.norm.genes,"Low normality genes after quantile normalisation")
+qq_plotter_5(q.norm.exp,high.norm.genes,"High normality genes after quantile normalisation")
+
+```
+
+
+
+
+
+# Data Analysis
+
+
+
+## Dimensionality Reduction of Annotation Data
+
+
+
+## Differential Expression Analysis
+
+We now set out to perform differential expression analysis between the different tumour subtypes. After Benjamini-Hochberg correction, we visualise the Top 50 most significant differentially expressed genes in a heatmap.
+
+```{r}
+st.DGE = DGE_analyser(exp,annot$expression_subtype)
+
+top.50.genes = top_gene_picker(st.DGE,50)
+
+top.50.exp = exp[which(rownames(exp) %in% top.50.genes),which(!is.na(annot$expression_subtype))] %>%
+  t()
+top.50.anot = annot %>%
+  select(expression_subtype,Tumor.stage,Smoking.Status) %>%
+  .[which(!is.na(luad_anot_clean$paper_expression_subtype)),]
+colnames(top.50.anot) = c("Expression Subtype","Tumour Stage", "Smoking Status")
+
+pheatmap(top.50.exp,show_rownames = FALSE, show_colnames = FALSE, annotation_row = top.50.anot, main = "Expression heatmap of the TOP 50 DEGs across subtypes", annotation_names_row = FALSE)
+
+```
+
+We then compare the top 5 DEGs using a boxplot. TRU seems to be the more clearly differentiated subtype compared to prox.-inflam. and prox.-prolif.. Most of the genes are well known in tumour research, namely KPNA2, NFIX, RASGRF1 and, TPX2. ADH1B is less strongly associated with tumours, yet some finding do link it to reduced tumour stemness.
+
+```{r}
+top.5.genes = top_gene_picker(st.DGE,5)
+top.5.exp = exp[which(rownames(exp) %in% top.5.genes),] %>%
+  t()
+top.5.annotated = top.5.exp %>%
+  as.data.frame() %>%
+  mutate(subtype=annot$expression_subtype)
+
+top.5.long = top.5.annotated %>% rownames_to_column(var = "Sample ID") %>% pivot_longer(cols = c(colnames(top.5.annotated)[1:5]), names_to = "gene", values_to = "expr")
+
+ggplot(top.5.long, aes(x = subtype, y = expr, fill = subtype)) +
+  geom_boxplot() +
+  facet_wrap(~gene) +
+  labs(x = "Subtype", y = "Expression") +
+  theme_bw()
+```
+
+## Expression Correlation amongst Highly Differentially Expressed Genes
+
+We can also compare the correlation between top DEGs to find co-expressed or anti-expressed modules. There seems to be some genes which are in co-expressed and a separate module which seems inversely correlated.
+
+```{r}
+top.30.genes = top_gene_picker(st.DGE,30)
+top.30.exp = exp[which(rownames(exp) %in% top.30.genes),] %>%
+  t()
+
+top.30.cor = cor(top.30.exp, method = "spearman")
+
+pheatmap(top.30.cor, main = "Correlation among the Top 30 differentially expressed genes", show_rownames = TRUE, show_colnames = FALSE)
+```
+
+Furthermore, we want to compare the top 30 DEGs to clinical feature. For this, we compute the correlation between continous clincial variables and the top 30 DEGs.
+
+```{r}
+cor.mat.clin.exp = exp_clin_correlater(top.30.exp,annot)
+colnames(cor.mat.clin.exp) = c("Age at diagnosis","Non Silent Mutations", "Non Silent Mutations per Mb", "Ploidy", "Purity")
+
+pheatmap(cor.mat.clin.exp, treeheight_row = 0, treeheight_col = 0)
+```
+
+Finally, with respect to the differential gene expression, we want to ascertain how top 30 DEG expression differs between tumour stages. Curiously, many of the top DEGs are differentially expressed only in Stage IA vs. rest
+
+```{r}
+t.top.30.exp.df = t(top.30.exp) %>%
+  as.data.frame()
+tumour.stage.DGE.30 = DGE_analyser(t.top.30.exp.df,annot$Tumor.stage)
+
+pheatmap(tumour.stage.DGE.30, cluster_cols = FALSE, cluster_rows = TRUE, treeheight_row = 0, main = "Q-Values of Top 30 genes compared across Subtypes")
+
+```
+
+
+
+# Predictive Modelling
+
+
+
+## Based on Expression Data
+
+### Target: Expression Subtype
+
+First we initialise a mutable combined data set from our immutable annot and exp data sets, discard unnecessary annotation columns, and split the data into a training and testing data set. We also scale and centre both data sets based on the training data.
+
+```{r}
+data <- cbind(annot, t(exp))
+
+data <- data_splitter(data, "expression_subtype")
+training <- data[[1]]; testing <- data[[2]]
+
+norm.prep <- preProcess(training[, -1], method = c("center", "scale"))
+training <- cbind("expression_subtype"=training[,1], predict(norm.prep, training[,-1]))
+testing <- cbind("expression_subtype"=testing[,1], predict(norm.prep, testing[,-1]))
+```
+
+Using the scaled and centred training data, we then train randomForest and multinomial logistical regression models and make a prediction each. Then, we look at the ROC curves to ascertain the quality of the classifier. The random forest classifier outstrips the multinomial logistical one, especially when it comes to distinguishing proximal-inflammatory from proximal-proliferative biopsies. 
+
+```{r}
+es.rf.reg <- randomForest(expression_subtype ~ ., data = training, importance = TRUE, ntree = 500)
+es.mult.reg <- multinom(expression_subtype ~ ., data = training)
+
+es.rf.pred <- predict(es.rf.reg, testing[,-1])
+es.mult.pred <- predict(es.mult.reg, testing[,-1])
+```
+
+```{r, echo=T}
+multi_roc_plotter(es.rf.reg, testing, "Random Forest Classifier ROC-Curve")
+multi_roc_plotter(es.mult.reg, testing, "Multinomial Logistical Classifier ROC-Curve")
+```
+
+We want to take a look at the 5 most important variables for both models. For the random forest regression, we simply use variable importance as the metric. For multinomial logistical regression, we use the euclidean deviance of the coefficients from zero for each gene. These differ, though there is overlap. 
+
+```{r, echo=T}
+es.rf.imp <- variable_importance(es.rf.reg, mode="rf") %>% 
+  sort(., T) %>% names()
+es.mult.imp <- variable_importance(es.mult.reg, mode="mult") %>%
+  sort(., T) %>% names()
+
+
+es.rf.imp[1:5]
+es.mult.imp[1:5]
+```
+
+We then walk through both lists of genes sorted by their importance to the models until we reach an overlaping selection of 5. The given depth shows us how many of the sorted list we need to include to get our overlap.
+
+```{r, echo=T}
+imp_integrater(es.rf.imp, es.mult.imp)
+```
+
+
+### Target: Tumor Stage
+
+We now do the exact same for the prediction of tumor stage, with the addition of splitting the tumour stages into only two categories: Early and Late.
+
+```{r}
+data <- cbind(annot, t(exp))
+
+data <- data_splitter(data, "Tumor.stage")
+training <- data[[1]]; testing <- data[[2]]
+
+fg <- c("Stage I","Stage IA","Stage IB","Stage II","Stage IIA","Stage IIB"); b <- c("Early","Late")
+
+training <- target_dualler(training, "Tumor.stage", first.group=fg, boolean=b)
+testing <- target_dualler(testing, "Tumor.stage", first.group=fg, boolean=b)
+
+rm(fg, b)
+
+norm.prep <- preProcess(training[, -1], method = c("center", "scale"))
+training <- cbind("Tumor.stage"=training[,1], predict(norm.prep, training[,-1]))
+testing <- cbind("Tumor.stage"=testing[,1], predict(norm.prep, testing[,-1]))
+
+ts.rf.reg <- randomForest(Tumor.stage ~ ., data = training, importance = TRUE, ntree = 500)
+ts.log.reg <- glm(Tumor.stage ~ ., data = training, family = "binomial")
+ts.knn.reg <- train(Tumor.stage ~ ., data = training,  method = "knn", tuneGrid=expand.grid(k = 1:10), trControl=trainControl(method = "cv", number = 5, classProbs = TRUE))
+
+ts.rf.pred <- predict(ts.rf.reg, testing[,-1])
+ts.log.pred <- factor(ifelse(predict(ts.log.reg, testing[,-1]) > 0.5, "Late", "Early"))
+ts.knn.pred <- predict(ts.knn.reg, testing, type = "prob")[, "Late"] %>% {factor(ifelse(. > 0.5, "Late", "Early"))} 
+```
+
+Again, we take a look at the ROC curves. We see that random forest classification and kNN outstrip logistical regression.
+
+```{r, echo=T}
+multi_roc_plotter(ts.rf.reg, testing, "Random Forest Regression ROC-Curve")
+multi_roc_plotter(ts.knn.reg, testing, "k-Nearest Neighbours Regression ROC-Curve")
+roc_plotter(ts.log.reg, testing, "Binomial Logistical Regression ROC-Curve")
+```
+
+If we again look
+
+```{r}
+ts.rf.imp <- variable_importance(ts.rf.reg, mode="rf") %>%
+  sort(., T) %>% names()
+ts.log.imp <- variable_importance(ts.log.reg, mode="binom") %>%
+  sort(., T) %>% names()
+ts.knn.imp <- permutation_importance(
+  ts.knn.reg, data = testing, target="Tumor.stage")
+
+imp_integrater(ts.rf.imp, ts.log.imp)
+```
+
+
+
+## Quality and Comparison of Models
+
+
+
+## Based on Clinical Annotation
+
+
+
+## Integrative Model
+
+
+
+# Discussion
+
+
+
+# Conclusion
+

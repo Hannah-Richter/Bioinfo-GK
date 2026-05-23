@@ -18,47 +18,32 @@ NA_flattener <- function(data) {
 
 luad_anot_clean = NA_flattener(luad_anot_clean)
 
-#qq-plots for all genes from one patient
-ggplot(expression_data) +
-  geom_qq( aes(sample = get(colnames(expression_data)[2]))) +
-  geom_qq( aes(sample = get(colnames(expression_data)[21]))) +
-  geom_qq( aes(sample = get(colnames(expression_data)[85]))) +
-  geom_qq( aes(sample = get(colnames(expression_data)[107]))) +
-  geom_qq( aes(sample = get(colnames(expression_data)[171])))
+
+#-----------------------------------------
 
 
-#Transpose the dataset to allow for gene-wise qq-plots
-t_expression_data= t(column_to_rownames(expression_data, "gene")) %>% as.data.frame() %>% rownames_to_column(.,"patient") %>% tibble()
-ggplot(t_expression_data) +
-  geom_qq(aes(sample = get(colnames(t_expression_data)[4])))+
-  geom_qq(aes(sample = get(colnames(t_expression_data)[10])))+
-  geom_qq(aes(sample = get(colnames(t_expression_data)[400])))+
-  geom_qq(aes(sample = get(colnames(t_expression_data)[566])))+
-  geom_qq(aes(sample = get(colnames(t_expression_data)[1020])))
 
-#Histograms of some genes
-ggplot(t_expression_data) +
-  geom_histogram(aes(x = get(colnames(t_expression_data)[6])))
-ggplot(t_expression_data) +
-  geom_histogram(aes(x = get(colnames(t_expression_data)[15])))
-ggplot(t_expression_data) +
-  geom_histogram(aes(x = get(colnames(t_expression_data)[471])))
-ggplot(t_expression_data) +
-  geom_histogram(aes(x = get(colnames(t_expression_data)[1132])))
-
-
-#Shapiro-Wilks test of all genes separately
 norm_test = expression_data[-1] %>% apply(MARGIN = 1, function(x) shapiro.test(x))
 
 #Extract p-values from "Shapiro Test" Object and add to list; plot into histogram
 Shapiro_p_values = vector()
 for(i in 1:length(norm_test)) Shapiro_p_values[i]= norm_test[[i]]$p.value
+
+
+#------------------------------------------
 Shapiro_p_values %>% hist(,breaks=20)
 
 
-low_norm_genes = which(rank(Shapiro_p_values)<=5)
-medium_norm_genes = which(rank(Shapiro_p_values) %in% seq(1500,1504))
-high_norm_genes = which(rank(Shapiro_p_values)>{max(rank(Shapiro_p_values))-5})
+
+
+
+
+
+#-------------------------------------------
+
+low.norm.genes = which(rank(norm.test)<=5)
+med.norm.genes = which(rank(norm.test) %in% seq(1500,1504))
+high.norm.genes = which(rank(norm.test)>{max(rank(norm.test))-5})
 
 
 t_expression_data= t(column_to_rownames(expression_data, "gene")) %>% as.data.frame() %>% rownames_to_column(.,"patient") %>% tibble()
@@ -84,8 +69,8 @@ ggplot(t_expression_data) +
   geom_qq(aes(sample = get(colnames(t_expression_data)[low_norm_genes[4]])))+
   geom_qq(aes(sample = get(colnames(t_expression_data)[low_norm_genes[5]])))
 
-#Percentage of Shapiro-Wilk Tests whith p smaller 0.05
-sum(Shapiro_p_values < 0.05)/length(Shapiro_p_values)
+
+
 
 #Quantile Normalisation
 
@@ -161,9 +146,17 @@ unique(top_DEGs) %>% sort() %>% .[which(as.vector(table(top_DEGs))>1)]
 #Both of these are repeated twice. We will simply make a heatmap of the 49 unique DEGs among the 3 top 18 lists.
 
 #Select top 49 genes
-DEG_st_exp = as.data.frame(expression_data) %>% column_to_rownames(colnames(expression_data)[1]) %>% .[expression_data[[1]] %in% unique(top_DEGs),which(!is.na(luad_anot_clean$paper_expression_subtype))]
+DEG_st_exp = as.data.frame(expression_data) %>% 
+  column_to_rownames(colnames(expression_data)[1]) %>% 
+  .[
+    expression_data[[1]] %in% unique(top_DEGs),
+    which(!is.na(luad_anot_clean$paper_expression_subtype))
+  ]
 #Select desired annotation columns
-DEG_anot = as.data.frame(luad_anot_clean) %>% column_to_rownames(colnames(luad_anot_clean)[1]) %>% select(paper_expression_subtype,ajcc_pathologic_stage,paper_Smoking.Status) %>% .[which(!is.na(luad_anot_clean$paper_expression_subtype)),]
+DEG_anot = as.data.frame(luad_anot_clean) %>%
+  column_to_rownames(colnames(luad_anot_clean)[1]) %>%
+  select(paper_expression_subtype,ajcc_pathologic_stage,paper_Smoking.Status) %>%
+  .[which(!is.na(luad_anot_clean$paper_expression_subtype)),]
 #Heatmap with annotation
 pheatmap(t(DEG_st_exp), show_colnames = FALSE, show_rownames = FALSE, annotation_row = DEG_anot)
 
@@ -180,7 +173,7 @@ ggplot(top_5_expression_long, aes(x = subtype, y = expr, fill = subtype)) +
   labs(x = "Subtype", y = "Expression") +
   theme_bw()
 
-#Oncogenes or TUmour Suppressor
+#Oncogenes or Tumour Suppressor
 #ADH1B: Alcohol dehydrogenase 1B; literature findings on LUAD and decreased ADH1B+ CAFs; other finding ADH1B reduces tumor stemness by activating cAMP/PKA/CERB1 signaling.
 #KPNA2: Karyopherin alpha 2, nuclear export protein; key target in tumour research, tumour progression, localisation of proteins, poor prognosis
 #NFIX: Nuclear factor 1 X-type, member of the nuclear factor I family; transcription factor, expression in adults limited and normally seen in embryonic development, previously found in tumours
@@ -208,6 +201,9 @@ factor_numeriser <- function(annot) {
 top_30_cor = exp_df[,which(rank(BH_DGE_df$minimum)<31)] %>% cor(method = "spearman")
 pheatmap(top_30_cor, main = "Correlation among the Top 30 differentially expressed genes")
 
+
+
+
 DEG_full_exp = as.data.frame(expression_data) %>% column_to_rownames(colnames(expression_data)[1]) %>% .[expression_data[[1]] %in% unique(top_DEGs),] %>% t() %>% as.data.frame()
 Cont_clin_vars = factor_numeriser(anot_df)
 selector = vector(length=ncol(Cont_clin_vars))
@@ -231,7 +227,7 @@ cor_genes_clin(exp_for_cor, Cont_clin_vars) %>% pheatmap()
 
 #DEGs and tumour stage
 
-#We'll use the top 3 DEGs
+#We'll use the top 30 DEGs
 
 top_30_DEG = exp_df[,which(rank(BH_DGE_df$minimum)<31)] %>% as.data.frame()
 sample_stage = factor_numeriser(anot_df)$ajcc_pathologic_stage
