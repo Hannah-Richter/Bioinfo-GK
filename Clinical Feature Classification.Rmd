@@ -16,12 +16,17 @@ library(dplyr)
 library (nnet)
 library(caret)
 library(randomForest)
-luad_anot_clean_num <- luad_anot_clean %>% 
-  select(ajcc_pathologic_stage, paper_Sex, paper_Age.at.diagnosis, paper_Smoking.Status, paper_expression_subtype, paper_Tumor.stage)%>%
-  filter(!is.na(paper_Sex))
+library(pROC)
 ```
-look how many single NAs are left, there are 19 NA values so we remove all rows with NAs
+
 ```{r}
+luad_anot_clean[luad_anot_clean == "[unknown]"] <- NA
+luad_anot_clean[luad_anot_clean == "[Not Available]"] <- NA
+```
+ we remove all rows with NAs
+```{r}
+luad_anot_clean_num <- luad_anot_clean %>% 
+  select(ajcc_pathologic_stage, paper_Sex, paper_Age.at.diagnosis, paper_Smoking.Status, paper_expression_subtype, paper_Tumor.stage)
 colSums(is.na(luad_anot_clean_num))
 luad_anot_clean_num<- na.omit(luad_anot_clean_num)
 ```
@@ -37,6 +42,7 @@ luad_anot_clean_num$paper_Sex <- factor(luad_anot_clean_num$paper_Sex)
 luad_anot_clean_num$paper_Tumor.stage <- factor(luad_anot_clean_num$paper_Tumor.stage)
 luad_anot_clean_num$paper_Smoking.Status <- factor(luad_anot_clean_num$paper_Smoking.Status)
 luad_anot_clean_num$ajcc_pathologic_stage <- factor(luad_anot_clean_num$ajcc_pathologic_stage)
+luad_anot_clean_num$paper_Age.at.diagnosis<-as.numeric(as.character(luad_anot_clean_num$paper_Age.at.diagnosis))
 str(luad_anot_clean_num)
 ```
 divide in train and test data 70/30
@@ -53,7 +59,7 @@ summary(model_logreg1)
 ```
 choose different features
 ```{r}
-model_logreg2 <- multinom(paper_expression_subtype ~ paper_Sex + paper_Age.at.diagnosis + paper_Smoking.Status, data = luad_anot_clean_num)
+model_logreg2 <- multinom(paper_expression_subtype ~ paper_Sex + paper_Age.at.diagnosis + paper_Tumor.stage, data = luad_anot_clean_num)
 summary(model_logreg2)
 ```
 this model with these 3 features makes the most sense to predict expression_subtype (model has the highest accuracy)
@@ -102,4 +108,83 @@ testing the knn model
 ```{r}
 pred_knn <- predict(model_knn, newdata = test_norm)
 confusionMatrix(pred_knn, test_norm$paper_expression_subtype)
+```
+AUC ROC
+```{r}
+randomforest_prob <- predict(
+  model_randomforest,
+  newdata = test_data,
+  type = "prob")
+
+roc_rf <- multiclass.roc(
+  response = test_data$paper_expression_subtype,
+  predictor = as.matrix(randomforest_prob))
+roc_rf$auc
+```
+
+```{r}
+logreg_prob <- predict(
+  model_logreg,
+  newdata = test_data,
+  type = "probs")
+
+roc_logreg <- multiclass.roc(
+  response = test_data$paper_expression_subtype,
+  predictor = as.matrix(logreg_prob))
+
+roc_logreg$auc
+```
+
+```{r}
+knn_prob <- predict(
+  model_knn,
+  newdata = test_data,
+  type = "prob")
+
+roc_knn <- multiclass.roc(
+  response = test_data$paper_expression_subtype,
+  predictor = as.matrix(knn_prob))
+
+roc_knn$auc
+```  
+```{r}
+roc_PI_rf <- roc(
+  test_data$paper_expression_subtype == "PI",
+  randomforest_prob[, "PI"])
+roc_PI_logreg<-roc( test_data$paper_expression_subtype == "PI",
+  logreg_prob[, "PI"])
+roc_PI_knn<-roc( test_data$paper_expression_subtype == "PI",
+  knn_prob[, "PI"])
+
+plot(roc_PI_rf, col="red")
+lines(roc_PI_logreg, col="green")
+lines(roc_PI_knn, col="blue")
+```
+
+```{r}
+roc_PP_rf <- roc(
+  test_data$paper_expression_subtype == "PP",
+  randomforest_prob[, "PP"])
+roc_PP_logreg<-roc( test_data$paper_expression_subtype == "PP",
+  logreg_prob[, "PP"])
+roc_PP_knn<-roc( test_data$paper_expression_subtype == "PP",
+  knn_prob[, "PP"])
+
+plot(roc_PP_rf, col="red")
+lines(roc_PP_logreg, col="green")
+lines(roc_PP_knn, col="blue")
+```
+
+```{r}
+roc_TRU_rf <- roc(
+  test_data$paper_expression_subtype == "TRU",
+  randomforest_prob[, "TRU"])
+roc_TRU_logreg<-roc( test_data$paper_expression_subtype == "TRU",
+  logreg_prob[, "TRU"])
+roc_TRU_knn<-roc( test_data$paper_expression_subtype == "TRU",
+  knn_prob[, "TRU"])
+
+plot(roc_TRU_rf, col="red")
+lines(roc_TRU_logreg, col="green")
+lines(roc_TRU_knn, col="blue")
 ```
