@@ -89,26 +89,25 @@ multi_roc_plotter <- function(reg, truth, title) {
   legend("bottomright", legend = names(rocs), col=colours, lwd=2)
 }
 
-permutation_importance <- function(reg, data, target, metric={function(truth, pred) mean(truth == pred)}, maximize=T, n_repeats=10) {
-  y <- data[[target]]
-  x <- data[, setdiff(names(data), target), drop=F]
-  baseline_pred <- predict(reg, newdata = data)
-  baseline <- metric(y, baseline_pred)
-  res <- data.frame(feature=names(x), importance=NA_real_)
-  for (j in seq_along(x)) {
-    drops <- numeric(n_repeats)
-    for (r in seq_len(n_repeats)) {
-      x_perm <- x
-      x_perm[[j]] <- sample(x_perm[[j]])
-      perm_data <- cbind(x_perm, y=y)
-      names(perm_data)[ncol(perm_data)] <- target
-      perm_pred <- predict(reg, newdata = perm_data)
-      perm_score <- metric(y, perm_pred)
-      drops[r] <- if (maximize) baseline - perm_score else perm_score - baseline
+permutation_importance <- function(reg, data, target, metric={function(truth, pred) mean(truth == pred)}, repeats=10) {
+  truth <- data[[target]]
+  work <- data[, !{names(data)==target}]
+  baseline <- metric(truth, predict(reg, newdata = data))
+  res <- vector(length = length(names(work)))
+  names(res) <- names(work)
+  for (i in seq_along(res)) {
+    drops <- numeric(repeats)
+    for (j in seq_len(repeats)) {
+      perm <- work
+      perm[[i]] <- sample(perm[[i]])
+      perm.data <- cbind(truth, perm)
+      colnames(perm.data)[1] <- target
+      pred <- predict(reg, newdata = perm.data)
+      drops[j] <- baseline-metric(truth, pred)
     }
-    res$importance[j] <- mean(drops)
+    res[i] <- mean(drops) %>% abs()
   }
-  res$feature[order(-abs(res$importance))]
+  names(res)[order(-res)]
 }
 
 variable_importance <- function(data, mode) {
@@ -159,13 +158,13 @@ target_dualler <- function(data, target, first.group, boolean) {
 
 roc_plotter <- function (reg, truth, title) {
   roc <- roc(
-    response=testing[,1], 
-    predictor=predict(reg, testing[,-1], type="response"), levels=c("Early","Late"), 
+    response=truth[,1], 
+    predictor=predict(reg, truth[,-1], type="response"), levels=c("Early","Late"), 
     direction="<"
   )
-  legname <- roc$levels; legname <- paste0(legname[1],"/",legname[2])
+  legend.name <- roc$levels; legend.name <- paste0(legend.name[1],"/",legend.name[2])
   plot(roc, col = "red", main = title, lwd = 2)
-  legend("bottomright", legend = legname, col="red", lwd=2)
+  legend("bottomright", legend = legend.name, col="red", lwd=2)
 }
 
 confusion_extracter <- function(con) {
@@ -188,7 +187,12 @@ confusion_extracter <- function(con) {
     Recall <- con$byClass["Recall"]
     return(c(Accuracy, F1, Precision, Recall))
   }
+}
 
+down_sampler <- function(data, target) {
+  out <- downSample(data, data[[target]])
+  out <- out[,which(colnames(out)!="Class")]
+  out
 }
 ```
 
@@ -309,26 +313,21 @@ First we initialise a mutable combined data set from our immutable annot and exp
 data <- cbind(annot, t(exp))
 
 data <- data_splitter(data, "expression_subtype")
-training <- data[[1]]; testing <- data[[2]]
+es.training <- data[[1]]; es.testing <- data[[2]]
 
-norm.prep <- preProcess(training[, -1], method = c("center", "scale"))
-training <- cbind("expression_subtype"=training[,1], predict(norm.prep, training[,-1]))
-testing <- cbind("expression_subtype"=testing[,1], predict(norm.prep, testing[,-1]))
+norm.prep <- preProcess(es.training[, -1], method = c("center", "scale"))
+es.training <- cbind("expression_subtype"=es.training[,1], predict(norm.prep, es.training[,-1]))
+es.testing <- cbind("expression_subtype"=es.testing[,1], predict(norm.prep, es.testing[,-1]))
 ```
 
-Using the scaled and centred training data, we then train randomForest and multinomial logistical regression models and make a prediction each. Then, we look at the ROC curves to ascertain the quality of the classifier. The random forest classifier outstrips the multinomial logistical one, especially when it comes to distinguishing proximal-inflammatory from proximal-proliferative biopsies. 
+Using the scaled and centred training data, we then train randomForest and multinomial logistical regression models and make a prediction each.
 
 ```{r}
-es.rf.reg <- randomForest(expression_subtype ~ ., data = training, importance = TRUE, ntree = 500)
-es.mult.reg <- multinom(expression_subtype ~ ., data = training)
+es.rf.reg <- randomForest(expression_subtype ~ ., data = es.training, importance = TRUE, ntree = 500)
+es.mult.reg <- multinom(expression_subtype ~ ., data = es.training)
 
-es.rf.pred <- predict(es.rf.reg, testing[,-1])
-es.mult.pred <- predict(es.mult.reg, testing[,-1])
-```
-
-```{r, echo=T}
-multi_roc_plotter(es.rf.reg, testing, "Random Forest Classifier ROC-Curve")
-multi_roc_plotter(es.mult.reg, testing, "Multinomial Logistical Classifier ROC-Curve")
+es.rf.pred <- predict(es.rf.reg, es.testing[,-1])
+es.mult.pred <- predict(es.mult.reg, es.testing[,-1])
 ```
 
 We want to take a look at the 5 most important variables for both models. For the random forest regression, we simply use variable importance as the metric. For multinomial logistical regression, we use the euclidean deviance of the coefficients from zero for each gene. These differ, though there is overlap. 
@@ -355,59 +354,120 @@ imp_integrater(es.rf.imp, es.mult.imp)
 
 We now do the exact same for the prediction of tumor stage, with the addition of splitting the tumour stages into only two categories: Early and Late.
 
-```{r}
+```{r, echo=T}
 data <- cbind(annot, t(exp))
 
 data <- data_splitter(data, "Tumor.stage")
-training <- data[[1]]; testing <- data[[2]]
+ts.training <- data[[1]]; ts.testing <- data[[2]]
 
 fg <- c("Stage I","Stage IA","Stage IB","Stage II","Stage IIA","Stage IIB"); b <- c("Early","Late")
 
-training <- target_dualler(training, "Tumor.stage", first.group=fg, boolean=b)
-testing <- target_dualler(testing, "Tumor.stage", first.group=fg, boolean=b)
+ts.training <- target_dualler(ts.training, "Tumor.stage", first.group=fg, boolean=b)
+ts.testing <- target_dualler(ts.testing, "Tumor.stage", first.group=fg, boolean=b)
 
 rm(fg, b)
 
-norm.prep <- preProcess(training[, -1], method = c("center", "scale"))
-training <- cbind("Tumor.stage"=training[,1], predict(norm.prep, training[,-1]))
-testing <- cbind("Tumor.stage"=testing[,1], predict(norm.prep, testing[,-1]))
+norm.prep <- preProcess(ts.training[,-1], method = c("center", "scale"))
+ts.training <- cbind("Tumor.stage"=ts.training[,1], predict(norm.prep, ts.training[,-1]))
+ts.testing <- cbind("Tumor.stage"=ts.testing[,1], predict(norm.prep, ts.testing[,-1]))
 
-ts.rf.reg <- randomForest(Tumor.stage ~ ., data = training, importance = TRUE, ntree = 500)
-ts.log.reg <- glm(Tumor.stage ~ ., data = training, family = "binomial")
-ts.knn.reg <- train(Tumor.stage ~ ., data = training,  method = "knn", tuneGrid=expand.grid(k = 1:10), trControl=trainControl(method = "cv", number = 5, classProbs = TRUE))
+ts.rf.reg <- randomForest(Tumor.stage ~ ., data = ts.training, importance = TRUE, ntree = 500)
+ts.log.reg <- glm(Tumor.stage ~ ., data = ts.training, family = "binomial")
+ts.knn.reg <- train(Tumor.stage ~ ., data = ts.training,  method = "knn", tuneGrid=expand.grid(k = 1:10), trControl=trainControl(method = "cv", number = 5, classProbs = TRUE))
 
-ts.rf.pred <- predict(ts.rf.reg, testing[,-1])
-ts.log.pred <- factor(ifelse(predict(ts.log.reg, testing[,-1]) > 0.5, "Late", "Early"))
-ts.knn.pred <- predict(ts.knn.reg, testing, type = "prob")[, "Late"] %>% {factor(ifelse(. > 0.5, "Late", "Early"))} 
+ts.rf.pred <- predict(ts.rf.reg, ts.testing[,-1])
+ts.log.pred <- factor(ifelse(predict(ts.log.reg, ts.testing[,-1]) > 0.5, "Late", "Early"),levels=c("Early","Late"))
+ts.knn.pred <- predict(ts.knn.reg, ts.testing, type = "prob")[, "Late"] %>% {factor(ifelse(. > 0.5, "Late", "Early"), levels=c("Early","Late"))} 
 ```
 
-Again, we take a look at the ROC curves. We see that random forest classification and kNN outstrip logistical regression.
+If we look at the importance of the various genes to the prediction, we again see some overlap between the random forest and binomial logistical regressions in the top 5 most important variables.
 
 ```{r, echo=T}
-multi_roc_plotter(ts.rf.reg, testing, "Random Forest Regression ROC-Curve")
-multi_roc_plotter(ts.knn.reg, testing, "k-Nearest Neighbours Regression ROC-Curve")
-roc_plotter(ts.log.reg, testing, "Binomial Logistical Regression ROC-Curve")
-```
-
-If we again look
-
-```{r}
 ts.rf.imp <- variable_importance(ts.rf.reg, mode="rf") %>%
   sort(., T) %>% names()
 ts.log.imp <- variable_importance(ts.log.reg, mode="binom") %>%
   sort(., T) %>% names()
 ts.knn.imp <- permutation_importance(
-  ts.knn.reg, data = testing, target="Tumor.stage")
+  ts.knn.reg, data = ts.testing, target="Tumor.stage", repeats = 100) # higher repeat number worse for runtime, but better for random sampling stability
 
-imp_integrater(ts.rf.imp, ts.log.imp)
-imp_integrater(ts.rf.imp, ts.knn.imp)
+ts.rf.imp[1:5]
+ts.log.imp[1:5]
+ts.knn.imp[1:5]
 ```
 
+We thus again look at how far we need to go to find an overlap between all three models of 5 important variables. 
 
+```{r, echo=T}
+imp_integrater(imp_integrater(ts.rf.imp, ts.log.imp, integ.len = 12)$important.variables, imp_integrater(ts.rf.imp, ts.knn.imp, integ.len = 12)$important.variables)
+```
 
 ## Quality and Comparison of Models
 
+To compare the quality of the modesl, we take a look at ROC curves to ascertain the quality of the expression subtype classifiers. The random forest classifier outstrips the multinomial logistical one, especially when it comes to distinguishing proximal-inflammatory from proximal-proliferative biopsies. 
 
+```{r, echo=T}
+multi_roc_plotter(es.rf.reg, es.testing, "Random Forest Classifier ROC-Curve")
+multi_roc_plotter(es.mult.reg, es.testing, "Multinomial Logistical Classifier ROC-Curve")
+```
+
+We now take a look at the ROC curves for the tumour stage classifiers. We see that random forest classification and kNN outstrip logistical regression.
+
+```{r, echo=T}
+multi_roc_plotter(ts.rf.reg, ts.testing, "Random Forest Regression ROC-Curve")
+multi_roc_plotter(ts.knn.reg, ts.testing, "k-Nearest Neighbours Regression ROC-Curve")
+roc_plotter(ts.log.reg, ts.testing, "Binomial Logistical Regression ROC-Curve")
+```
+
+When we look at key values for these models we can see why some of them don't perform well.
+
+```{r, echo=T}
+for (i in c("es.rf","es.mult")) {
+  assign(paste0(i, ".con"), confusionMatrix(get(paste0(i, ".pred")), es.testing$expression_subtype))
+}
+
+for (i in c("ts.rf","ts.log")) {
+  assign(paste0(i, ".con"), confusionMatrix(get(paste0(i, ".pred")), ts.testing$Tumor.stage))
+}
+ts.knn.con <- confusionMatrix(ts.knn.pred, ts.testing$Tumor.stage)
+
+# quality metrics for each of the models
+es.rf.q <- confusion_extracter(es.rf.con)
+es.mult.q <- confusion_extracter(es.mult.con)
+ts.log.q <- confusion_extracter(ts.log.con)
+ts.rf.q <- confusion_extracter(ts.rf.con)
+ts.knn.q <- confusion_extracter(ts.knn.con)
+
+es.comp.table <- data.frame("Random Forest"=es.rf.q, "Multinomial Logistical"=es.mult.q)
+es.comp.table
+
+ts.comp.table <- data.frame("Random Forest"=ts.rf.q, "Binomal Logistical"=ts.log.q, "k-Nearest Neighbours"=ts.knn.q)
+ts.comp.table
+```
+
+In the prediction of tumour stage, we have the problem, that our samples at Early stage far outnumber those at Late stage.
+
+```{r, echo=T}
+table(ts.training$Tumor.stage)
+```
+
+Rerunning training for the best performer (highest accuracy and precision) using a down-sampled training data set worsens performance.
+
+```{r, echo=T}
+ts.knn.cv.reg <- train(
+  Tumor.stage ~ .,
+  data = down_sampler(ts.training, "Tumor.stage"),
+  method = "knn",
+  trControl = trainControl(method = "cv", number = 5)
+)
+
+ts.knn.cv.reg %>% predict(ts.testing) %>% confusionMatrix(ts.testing$Tumor.stage) %>% confusion_extracter()
+```
+
+Also the ROC Curve looks less healthy.
+
+```{r, echo=}
+multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-Nearest Neighbours Regression with Balanced Target Class")
+```
 
 ## Based on Clinical Annotation
 
