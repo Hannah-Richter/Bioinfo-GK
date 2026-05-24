@@ -109,12 +109,11 @@ permutation_importance <- function(reg, data, target, repeats=10) {
       perm[[i]] <- sample(perm[[i]])
       perm.data <- cbind(truth, perm)
       colnames(perm.data)[1] <- target
-      pred <- predict(reg, newdata = perm.data)
-      drops[j] <- baseline-mean(truth == pred)
+      drops[j] <- baseline-mean(truth == predict(reg, newdata = perm.data))
     }
-    res[i] <- mean(drops)
+    res[i] <- -mean(drops)
   }
-  names(res)[order(-res)]
+  names(res)[order(res)]
 }
 
 variable_importance <- function(data, mode) {
@@ -957,25 +956,17 @@ imp_integrater(top.50.genes, es.rf.imp)
 To find an overlap, we need to go to a depth of 43, which is fascinating, but probably due DEGs being determined by difference in 1 group vs the rest, whereas the classifiers use simple the top 50 genes with the highest variance, irrespective of group. We sadly don't have page space to show a rerun of the classifiers for expression subtype.
 
 ```{r}
-#data <- cbind(annot, top.50.exp)
-#
-#data <- data_splitter(data, "expression_subtype")
-#deg.es.training <- data[[1]]; deg.es.testing <- data[[2]]
-#
-#norm.prep <- preProcess(deg.es.training[, -1], method = c("center", "scale"))
-#deg.es.training <- cbind("expression_subtype"=deg.es.training[,1], predict(norm.prep, deg.es.training[,-1]))
-#deg.es.testing <- cbind("expression_subtype"=deg.es.testing[,1], predict(norm.prep, deg.es.testing[,-1]))
-#
-#deg.es.rf.reg <- randomForest(expression_subtype ~ ., data = deg.es.training, importance = TRUE, ntree = 500)
-#
-#deg.es.rf.pred <- predict(deg.es.rf.reg, deg.es.testing[,-1])
-#
-#deg.es.rf.imp <- variable_importance(deg.es.rf.reg, mode="rf") %>% 
-#  sort(., T) %>% names()
-#
-#imp_integrater(deg.es.rf.imp, top.50.genes)
+es.rf.imp[1:5]
 ```
 
+The top-5 most important genes of our best classifier for the expression subtype (random forest) are:
+- FGL1: binds to inhibitory receptor LAG-3 on activated T-cells, involved in T-cell modulation, and immune evasion by cancer celsl (Xu *et al.*, 2026).
+- PGC: role in regulation of mitochondrial biogenesis, improves mitochondrial capacity of cancer cells (Akasha *et al.*, 2025).
+- FGA: inhibited by TGF-\beta in context of high IL-6 expression, common in lung cancer (Han *et al.*, 2024; Schafer *et al.*, 2007).
+- AQP5: restores cancer cell proliferation in colorectal cancer cells under 5-FU exposure, knockdown inhibits tumorigenesis in and suppresses proliferation, migration, and self-renewal of gastric cancer stem cells (Yang *et al.*, 2025; Gao *et al.*, 2024).
+- LGALS4: inhibits glycolysis and promotes apoptosis in colorectal cancer cells, down regulation would be beneficial to cancer cells (Li *et al.*, 2025).
+
+All of these have significance to cancers. Depending on their regulation, they can modulate cancer cell proliferation, survival, and aggressiveness.
 
 ## Based on Clinical Annotation
 ```{r}
@@ -1217,5 +1208,18 @@ pheatmap(top.5.var.exp.comp, show_rownames = FALSE, treeheight_row = 0,annotatio
 
 
 
-# Conclusion
+# References
 
+Akasha R, Enrera JA, Fatima SB, et al. Oxidative phosphorylation and breast cancer progression: insights into PGC-1α’s role in mitochondrial function. Naunyn-Schmiedeberg’s Archives of Pharmacology 2025;398:9887–900. doi:10.1007/s00210-025-04018-w
+
+Gao P, Chen A, Tian H, et al. Investigating the mechanism and the effect of aquaporin 5 (AQP5) on the self-renewal capacity of gastric cancer stem cells. J Cancer 2024;15:4313–27. doi:10.7150/jca.92745
+
+Han X, Liu Z, Cui M, et al. FGA influences invasion and metastasis of hepatocellular carcinoma through the PI3K/AKT pathway. Aging 2024;16:12806–19. doi:10.18632/aging.206011
+
+Li S, Yang K, Ye J, et al. LGALS4 inhibits glycolysis and promotes apoptosis of colorectal cancer cells via β‑catenin signaling. Oncol Lett 2025;29:126. doi:10.3892/ol.2025.14873
+
+Schafer ZT, Brugge JS. IL-6 involvement in epithelial cancers. J Clin Invest 2007;117:3660–3. doi:10.1172/JCI34237
+
+Xu X, Zhang B, Chen G, et al. Nanoengineered T cell membrane-coated nanodecoys blocking LAG-3/FGL1 to enhance cancer immunotherapy. Biomaterials 2026;326:123695. doi:10.1016/j.biomaterials.2025.123695
+
+Yang X, Zhou C, Kong W, et al. Relationship between AQP5 and chemotherapy resistance in colorectal cancer cells and its mechanism. Discov Oncol 2025;16:1468. doi:10.1007/s12672-025-03193-9
