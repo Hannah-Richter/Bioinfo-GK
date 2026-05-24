@@ -1101,11 +1101,11 @@ We are comparing all 3 models for predicting the variables "PI", "PP" and "TRU" 
 ```{r, include=TRUE}
 roc_PI_rf <- roc(
   test_data$paper_expression_subtype == "PI",
-  randomforest_prob[, "PI"])
+  randomforest_prob[, "PI"], quiet = TRUE)
 roc_PI_logreg<-roc( test_data$paper_expression_subtype == "PI",
-  logreg_prob[, "PI"])
+  logreg_prob[, "PI"], quiet = TRUE)
 roc_PI_knn<-roc( test_data$paper_expression_subtype == "PI",
-  knn_prob[, "PI"])
+  knn_prob[, "PI"], quiet = TRUE)
 
 plot(roc_PI_rf, col="red")
 lines(roc_PI_logreg, col="green")
@@ -1115,11 +1115,11 @@ lines(roc_PI_knn, col="blue")
 ```{r, include=TRUE}
 roc_PP_rf <- roc(
   test_data$paper_expression_subtype == "PP",
-  randomforest_prob[, "PP"])
+  randomforest_prob[, "PP"], quiet = TRUE)
 roc_PP_logreg<-roc( test_data$paper_expression_subtype == "PP",
-  logreg_prob[, "PP"])
+  logreg_prob[, "PP"], quiet = TRUE)
 roc_PP_knn<-roc( test_data$paper_expression_subtype == "PP",
-  knn_prob[, "PP"])
+  knn_prob[, "PP"], quiet = TRUE)
 
 plot(roc_PP_rf, col="red")
 lines(roc_PP_logreg, col="green")
@@ -1129,11 +1129,11 @@ lines(roc_PP_knn, col="blue")
 ```{r, include=TRUE}
 roc_TRU_rf <- roc(
   test_data$paper_expression_subtype == "TRU",
-  randomforest_prob[, "TRU"])
+  randomforest_prob[, "TRU"], quiet = TRUE)
 roc_TRU_logreg<-roc( test_data$paper_expression_subtype == "TRU",
-  logreg_prob[, "TRU"])
+  logreg_prob[, "TRU"], quiet = TRUE)
 roc_TRU_knn<-roc( test_data$paper_expression_subtype == "TRU",
-  knn_prob[, "TRU"])
+  knn_prob[, "TRU"], quiet = TRUE)
 
 plot(roc_TRU_rf, col="red")
 lines(roc_TRU_logreg, col="green")
