@@ -93,7 +93,7 @@ multi_roc_plotter <- function(reg, truth, title) {
   colours <- heat.colors(len)
   plot(rocs[1][[1]][[1]], col=colours[1], main=title) 
   for (i in 2:len) {lines(rocs[i][[1]][[1]], col=colours[i], lwd=2)}
-  legend("bottomright", legend = names(rocs), col=colours, lwd=2)
+  legend("bottomright", legend = names(rocs), col=colours, lwd=2, cex = 0.7)
 }
 
 permutation_importance <- function(reg, data, target, repeats=10) {
@@ -171,7 +171,7 @@ roc_plotter <- function (reg, truth, title) {
   )
   legend.name <- roc$levels; legend.name <- paste0(legend.name[1],"/",legend.name[2])
   plot(roc, col = "red", main = title, lwd = 2)
-  legend("bottomright", legend = legend.name, col="red", lwd=2)
+  legend("bottomright", legend = legend.name, col="red", lwd=2, cex = 0.7)
 }
 
 confusion_extracter <- function(con) {
