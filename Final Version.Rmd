@@ -94,23 +94,23 @@ multi_roc_plotter <- function(reg, truth, title) {
   legend("bottomright", legend = names(rocs), col=colours, lwd=2)
 }
 
-permutation_importance <- function(reg, data, target, metric={function(truth, pred) mean(truth == pred)}, repeats=10) {
+permutation_importance <- function(reg, data, target, repeats=10) {
   truth <- data[[target]]
   work <- data[, !{names(data)==target}]
-  baseline <- metric(truth, predict(reg, newdata = data))
+  baseline <- mean(truth == predict(reg, newdata = data))
   res <- vector(length = length(names(work)))
   names(res) <- names(work)
   for (i in seq_along(res)) {
     drops <- numeric(repeats)
-    for (j in seq_len(repeats)) {
+    for (j in seq_along(drops)) {
       perm <- work
       perm[[i]] <- sample(perm[[i]])
       perm.data <- cbind(truth, perm)
       colnames(perm.data)[1] <- target
       pred <- predict(reg, newdata = perm.data)
-      drops[j] <- baseline-metric(truth, pred)
+      drops[j] <- baseline-mean(truth == pred)
     }
-    res[i] <- mean(drops) %>% abs()
+    res[i] <- mean(drops)
   }
   names(res)[order(-res)]
 }
