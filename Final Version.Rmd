@@ -733,9 +733,11 @@ top.5.long = top.5.annotated %>% rownames_to_column(var = "Sample ID") %>% pivot
 
 ggplot(top.5.long, aes(x = subtype, y = expr, fill = subtype)) +
   geom_boxplot() +
-  facet_wrap(~gene) +
-  labs(x = "Subtype", y = "Expression") +
-  theme_bw()
+  facet_wrap(~gene, scale = "free_y") +
+  labs(x = "Subtype", y = "Expression", title = "Expression of top 5 genes across subtypes") +
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 75, hjust = 1))
+  
 ```
 
 ## Expression Correlation amongst Highly Differentially Expressed Genes
@@ -758,7 +760,7 @@ Furthermore, we want to compare the top 30 DEGs to clinical feature. For this, w
 cor.mat.clin.exp = exp_clin_correlater(top.30.exp,annot)
 colnames(cor.mat.clin.exp) = c("Age at diagnosis","Non Silent Mutations", "Non Silent Mutations per Mb", "Ploidy", "Purity")
 
-pheatmap(cor.mat.clin.exp, treeheight_row = 0, treeheight_col = 0, fontsize = 7, fontsize_row = 6, fontsize_col = 6)
+pheatmap(cor.mat.clin.exp, treeheight_row = 0, treeheight_col = 0, main = "Correlation between continuous variables and top 30 DEGs",fontsize = 7, fontsize_row = 6, fontsize_col = 6)
 ```
 
 Finally, with respect to the differential gene expression, we want to ascertain how top 30 DEG expression differs between tumour stages. Curiously, many of the top DEGs are differentially expressed only in Stage IA vs. rest
@@ -1184,14 +1186,14 @@ top.5.var.exp = exp[which(rownames(exp) %in% top.5.var),] %>%
   t()
 top.5.var.annotated = top.5.var.exp %>%
   as.data.frame() %>%
-  mutate(subtype=annot$Tumor.stage) %>% .[complete.cases(.),]
+  mutate(stage=annot$Tumor.stage) %>% .[complete.cases(.),]
 
 top.5.var.long = top.5.var.annotated %>% rownames_to_column(var = "Sample ID") %>% pivot_longer(cols = c(colnames(top.5.var.annotated)[1:5]), names_to = "gene", values_to = "expr")
 
-ggplot(top.5.var.long, aes(x = subtype, y = expr, fill = subtype)) +
+ggplot(top.5.var.long, aes(x = stage, y = expr, fill = stage)) +
   geom_boxplot() +
-  facet_wrap(~gene) +
-  labs(x = "Subtype", y = "Expression") +
+  facet_wrap(~gene, scale = "free_y") +
+  labs(x = "Stage", y = "Expression", title = "Expression of the 5 most important genes across tumour stages") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 75, hjust = 1))
 
@@ -1203,7 +1205,7 @@ top.5.var.exp.comp = top.5.var.exp[which(complete.cases(top.5.var.anot)),]
 
 top.5.var.anot = top.5.var.anot[which(complete.cases(top.5.var.anot)),]
 
-pheatmap(top.5.var.exp.comp, show_rownames = FALSE, treeheight_row = 0,annotation_row = top.5.var.anot, fontsize = 7, fontsize_row = 6, fontsize_col = 6)
+pheatmap(top.5.var.exp.comp, show_rownames = FALSE, treeheight_row = 0,annotation_row = top.5.var.anot, main = "Expression of top 5 most important genes", fontsize = 7, fontsize_row = 6, fontsize_col = 6)
 
 ```
 
@@ -1213,7 +1215,11 @@ The given data set is extremely poor and missing a lot of annotation, which sign
 
 Those genes we found to be predictive (in whatever low capacity that was) are sensible, as they are known to have functions in other cancers and may indeed be able to differentiate various forms of lung adenocarcinomata from one another.
 
+The differentially expressed genes between the subtypes were mostly those, which differed from TRU, to proximal-inflamatory, and proximal-proliferative. This indicates, that TRU might be a more distinct subtype, compared to proximal-inflamatroy, and proximal-proliferative, which may be more closely related.
 
+Correlating the top 30 genes across all samples, both tumour and healthy tissue, revealed two main co-expressed modules which were inversely correlated with one another. One of these module contained a plethora of genes which are known to be downregulated in lung cancers. The second module, which was inversely correlated with the first, instead contained genes which are tendentially upregulated in lung cancers.
+
+As we used the full set of observations, including healthy tissue samples, this might reflect the genetic changes of cancer cells. We posit that this is due the casette of tumour supressor genes being downregulated in tumour tissue and upregulated in healthy tissue, whilst the inverse is true for the casette of tumour associated genes.
 
 # References
 
