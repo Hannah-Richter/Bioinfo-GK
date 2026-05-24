@@ -616,7 +616,7 @@ p1 + p2 + plot_layout(ncol=2)
 
 UMAP Uniform Manifold Approximation and Projection
 
-```{r UMAP, include=T} 
+```{r UMAP, include=T, out.width="50%", fig.align="left", fig.width=4} 
 umap_input <- t(luad_matrix)
 luad.umap <- umap(umap_input)
 samples <- rownames(umap_input)
@@ -636,8 +636,7 @@ umap_with_annot <- umap_df %>%
       sample_code == "11" ~ "Normal",
       TRUE ~ "Other"
     ))
-p1 <- ggplot(umap_with_annot, aes(UMAP1, UMAP2, colour=sample_type)) + geom_point()
-p1 + plot_spacer() + plot_layout(ncol=2)
+ggplot(umap_with_annot, aes(UMAP1, UMAP2, colour=sample_type)) + geom_point()
 ```
 #UMAP on top PCs
 #top k PCs extrahieren
@@ -880,7 +879,7 @@ multi_roc_plotter(es.mult.reg, es.testing, "Multinomial Logistical Classifier RO
 
 We now take a look at the ROC curves for the tumour stage classifiers. We see that random forest classification and kNN outstrip logistical regression.
 
-```{r, include=T}
+```{r, include=T, fig.height=8}
 layout(matrix(c(1,2,3,4), 2))
 
 multi_roc_plotter(ts.rf.reg, ts.testing, "Random Forest Regression ROC-Curve")
@@ -935,10 +934,8 @@ ts.knn.cv.reg %>% predict(ts.testing) %>% confusionMatrix(ts.testing$Tumor.stage
 
 Also the ROC Curve looks less healthy.
 
-```{r, include=T}
-layout(matrix(c(1,2),2))
-
-multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-Nearest Neighbours Regression\nwith Balanced Target Class")
+```{r, include=T, out.width="50%", fig.align="left", fig.width=4}
+multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of kNN Regression")
 ```
 
 We determined the top 5 genes for the classifiers for each of the classification problems (expression subtype, tumour stage) by looking at the best-performer and by integrating across classifiers to find an overlap of top-5 important genes. We can here see, that the top-5 differentially expressed genes have no overlap with the most important predictors. 
