@@ -861,7 +861,7 @@ imp_integrater(imp_integrater(ts.rf.imp, ts.log.imp, integ.len = 12)$important.v
 
 ## Quality and Comparison of Models
 
-To compare the quality of the modesl, we take a look at ROC curves to ascertain the quality of the expression subtype classifiers. The random forest classifier outstrips the multinomial logistical one, especially when it comes to distinguishing proximal-inflammatory from proximal-proliferative biopsies. 
+To compare the quality of the models, we take a look at ROC curves to ascertain the quality of the expression subtype classifiers. The random forest classifier outstrips the multinomial logistical one, especially when it comes to distinguishing proximal-inflammatory from proximal-proliferative biopsies. 
 
 ```{r, include=T}
 layout(matrix(c(1,2), 1))
