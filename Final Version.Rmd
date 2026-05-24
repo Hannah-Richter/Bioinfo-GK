@@ -731,9 +731,10 @@ top.5.long = top.5.annotated %>% rownames_to_column(var = "Sample ID") %>% pivot
 
 ggplot(top.5.long, aes(x = subtype, y = expr, fill = subtype)) +
   geom_boxplot() +
-  facet_wrap(~gene) +
-  labs(x = "Subtype", y = "Expression") +
-  theme_bw()
+  facet_wrap(~gene, scales = "free_y") +
+  labs(x = "Subtype", y = "Expression", title = "Boxplot of Top 5 DEG Expression by Subtype") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90), plot.title = element_text(hjust = 0.5))
 ```
 
 ## Expression Correlation amongst Highly Differentially Expressed Genes
@@ -754,19 +755,19 @@ Furthermore, we want to compare the top 30 DEGs to clinical feature. For this, w
 
 ```{r, include=T}
 cor.mat.clin.exp = exp_clin_correlater(top.30.exp,annot)
-colnames(cor.mat.clin.exp) = c("Age at diagnosis","Non Silent Mutations", "Non Silent Mutations per Mb", "Ploidy", "Purity")
+colnames(cor.mat.clin.exp) = c("Age at diagnosis","Mutations", "Mutations per Mb", "Ploidy", "Purity")
 
-pheatmap(cor.mat.clin.exp, treeheight_row = 0, treeheight_col = 0, fontsize = 7, fontsize_row = 6, fontsize_col = 6)
+pheatmap(cor.mat.clin.exp, treeheight_row = 0, treeheight_col = 0, fontsize = 7, main = "Correlation between continuous clinical and moecular variables and top 30 DEGs", fontsize_row = 6, fontsize_col = 6)
 ```
 
 Finally, with respect to the differential gene expression, we want to ascertain how top 30 DEG expression differs between tumour stages. Curiously, many of the top DEGs are differentially expressed only in Stage IA vs. rest
 
 ```{r, include=T}
-t.top.30.exp.df = t(top.30.exp) %>%
+t.top.30.exp.df = t(top.30.exp[which(annot$is.tumour),]) %>%
   as.data.frame()
-tumour.stage.DGE.30 = DGE_analyser(t.top.30.exp.df,annot$Tumor.stage)
+tumour.stage.DGE.30 = DGE_analyser(t.top.30.exp.df,annot$Tumor.stage[which(annot$is.tumour)])
 
-pheatmap(tumour.stage.DGE.30, cluster_cols = FALSE, cluster_rows = TRUE, treeheight_row = 0, main = "Q-Values of Top 30 genes compared across Subtypes", fontsize = 7, fontsize_row = 6, fontsize_col = 6)
+pheatmap(tumour.stage.DGE.30, cluster_cols = FALSE, cluster_rows = TRUE, treeheight_row = 0, main = "Q-Values of Top 30 genes compared across Stages", fontsize = 7, fontsize_row = 6, fontsize_col = 6)
 
 ```
 
@@ -1190,16 +1191,16 @@ top.5.var.exp = exp[which(rownames(exp) %in% top.5.var),] %>%
   t()
 top.5.var.annotated = top.5.var.exp %>%
   as.data.frame() %>%
-  mutate(subtype=annot$Tumor.stage) %>% .[complete.cases(.),]
+  mutate(stage=annot$Tumor.stage) %>% .[complete.cases(.),]
 
 top.5.var.long = top.5.var.annotated %>% rownames_to_column(var = "Sample ID") %>% pivot_longer(cols = c(colnames(top.5.var.annotated)[1:5]), names_to = "gene", values_to = "expr")
 
-ggplot(top.5.var.long, aes(x = subtype, y = expr, fill = subtype)) +
+ggplot(top.5.var.long, aes(x = stage, y = expr, fill = stage)) +
   geom_boxplot() +
-  facet_wrap(~gene) +
-  labs(x = "Subtype", y = "Expression") +
+  facet_wrap(~gene, scales = "free_y") +
+  labs(x = "Stage", y = "Expression", title = "Top 5 most important genes by tumour stage") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 75, hjust = 1))
+  theme(axis.text.x = element_text(angle = 75, hjust = 1), plot.title = element_text(hjust = 0.5))
 
 top.5.var.anot = annot %>%
   select(expression_subtype,Tumor.stage,Smoking.Status,Ploidy.ABSOLUTE.calls,Nonsilent.Mutations)
@@ -1209,7 +1210,7 @@ top.5.var.exp.comp = top.5.var.exp[which(complete.cases(top.5.var.anot)),]
 
 top.5.var.anot = top.5.var.anot[which(complete.cases(top.5.var.anot)),]
 
-pheatmap(top.5.var.exp.comp, show_rownames = FALSE, treeheight_row = 0,annotation_row = top.5.var.anot, fontsize = 7, fontsize_row = 6, fontsize_col = 6)
+pheatmap(top.5.var.exp.comp, show_rownames = FALSE, treeheight_row = 0,annotation_row = top.5.var.anot, main = "Expression of the 5 most important genes", fontsize = 7, fontsize_row = 6, fontsize_col = 6)
 
 ```
 
