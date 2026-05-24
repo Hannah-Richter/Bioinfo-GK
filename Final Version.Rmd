@@ -301,7 +301,7 @@ annot <- luad_anot_clean
 head(annot)
 ```
 
-We can see here, that there are indeed values missing in a lot of the columns. Looking at the documentation for the data source ({{SOURCE}}), we can also see, that the first three segments = or the first 12 digits = of the barcode encode the patient ID. We thus replace paper_patient with the barcode trimmed to position 12.
+We can see here, that there are indeed values missing in a lot of the columns. We can also see, that the first three segments = or the first 12 digits = of the barcode encode the patient ID. We thus replace paper_patient with the barcode trimmed to position 12.
 
 ```{r}
 annot$paper_patient <- strtrim(annot$barcode, 12)
@@ -355,7 +355,7 @@ for (i in seq_along(annot)) {
 classes # could have been a vector, but legibility is better when a data frame.
 ```
 
-We know from the documentation of the data ({{SOURCE}}), that the leading numbers of the fourth segment tell us whether the sample is a tumour or not. We use this to encode a new column entitled 'is.tumour' storing that information. Since this segment only has the values of '01' and '11', and since '11' codes for healthy tissue and '01' for tumour tissue, a boolean suffices.
+We know from the documentation of the data (https://gdc.cancer.gov/resources-tcga-users/tcga-code-tables/sample-type-codes), that the leading numbers of the fourth segment tell us whether the sample is a tumour or not. We use this to encode a new column entitled 'is.tumour' storing that information. Since this segment only has the values of '01' and '11', and since '11' codes for healthy tissue and '01' for tumour tissue, a boolean suffices.
 
 ```{r}
 annot <- annot %>% mutate(is.tumour = substring(rownames(annot), 14, 15)=="01")
