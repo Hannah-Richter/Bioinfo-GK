@@ -561,28 +561,24 @@ p1|p2
 ```
 The tumor samples are clustered together and away from the normal samples.
 ```{r, include=T}
-p1 <- ggplot(pca_with_annot,
+ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = paper_expression_subtype)) +
   geom_point() +
   scale_colour_manual(values = c("yellow", "red","blue"))
-p2 <- ggplot(pca_with_annot,
+ggplot(pca_with_annot,
        aes(x = PC1, y = PC3, colour = paper_expression_subtype)) +
   geom_point() +
   scale_colour_manual(values = c( "red","blue", "yellow"))
-
-p1|p2
 ```
 ```{r, include=T}
-p1 <- ggplot(pca_with_annot,
+ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = paper_Smoking.Status)) +
   geom_point() +
   scale_colour_manual(values = c("yellow", "red","blue", "green", "grey"))
-p2 <- ggplot(pca_with_annot,
+ggplot(pca_with_annot,
        aes(x = PC1, y = PC3, colour = paper_Smoking.Status)) +
   geom_point() +
   scale_colour_manual(values = c( "red","blue", "yellow", "green", "grey"))
-
-p1|p2
 ```
 
 PCA isn`t separating the feature subtypes clearly so we perform t-distributed Stochastic Neighbor Embedding. We first want to see again if the normal and tumor samples are separating, after we separate the expression subtypes. They are roughly clustering together.
@@ -1173,7 +1169,7 @@ int.es.rf.pred <- predict(int.es.rf.reg, int.es.testing[,-1])
 
 layout(matrix(c(1,2), 1))
 
-multi_roc_plotter(int.es.rf.reg, int.es.testing, "Random Forest Classifier ROC-Curve")
+multi_roc_plotter(int.es.rf.reg, int.es.testing, "Integrated Random Forest Classifier ROC-Curve")
 multi_roc_plotter(es.rf.reg, es.testing, "Random Forest Classifier ROC-Curve")
 
 data.frame("Integrated Random Forest"=confusion_extracter(confusionMatrix(int.es.rf.pred, int.es.testing$targets.expression_subtype)), "Non-integrated Random Forest"=es.rf.q)
