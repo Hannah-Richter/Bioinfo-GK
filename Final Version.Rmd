@@ -889,7 +889,7 @@ multi_roc_plotter(es.mult.reg, es.testing, "Multinomial Logistical Classifier RO
 
 We now take a look at the ROC curves for the tumour stage classifiers. We see that random forest classification and kNN outstrip logistical regression.
 
-```{r, include=T}
+```{r, include=T, fig.height=8}
 layout(matrix(c(1,2,3,4), 2))
 
 multi_roc_plotter(ts.rf.reg, ts.testing, "Random Forest Regression ROC-Curve")
