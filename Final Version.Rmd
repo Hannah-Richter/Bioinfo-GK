@@ -1209,6 +1209,10 @@ pheatmap(top.5.var.exp.comp, show_rownames = FALSE, treeheight_row = 0,annotatio
 
 # Discussion
 
+The given data set is extremely poor and missing a lot of annotation, which significantly lowers their value and the predictive capacity of classifiers trained off them. Most classifiers are poor, whether using expression data or clinical annotation, and all are sensitive to seed changes. The data set contains too few usable observations, as to initialise any well-functioning classifier.
+
+Those genes we found to be predictive (in whatever low capacity that was) are sensible, as they are known to have functions in other cancers and may indeed be able to differentiate various forms of lung adenocarcinomata from one another.
+
 
 
 # References
