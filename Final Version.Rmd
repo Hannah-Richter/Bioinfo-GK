@@ -368,9 +368,8 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 
 ## Clinical Annotation
 
-Explore pathologic stage data
-
 ```{r}
+#Explore pathologic stage data
 table(luad_anot_clean$ajcc_pathologic_stage)
 ggplot(luad_anot_clean, aes(x=ajcc_pathologic_stage)) + geom_bar() +labs (title="Distribution of pathologic stage", x="pathologic stage", y="frequency")
 
@@ -389,8 +388,11 @@ luad_anot_clean %>%
 mean(luad_anot_clean$paper_Age.at.diagnosis, na.rm = TRUE)
 median(luad_anot_clean$paper_Age.at.diagnosis, na.rm = TRUE)
 ```
-Explore patient Sex data
+Pathologic stages 1A and 1B are the most common among the patients.
+Patients are between 41 and 85 years old, with a mean age of 65.5 years.
+
 ```{r}
+#Explore patient Sex data
 table(luad_anot_clean$paper_Sex)
 luad_anot_clean$paper_Sex[luad_anot_clean$paper_Sex == "[unknown]"] <-NA
 
@@ -399,10 +401,9 @@ luad_anot_clean %>%
   ggplot(aes(x = paper_Sex)) +
   geom_bar()
 ```
-There are 110 female and 73 male patients
+There are 110 female and 73 male patients.
 
-Explore Smoking status data
-```{r}
+```{r, includ=TRUE}
 table(luad_anot_clean$paper_Smoking.Status)
 luad_anot_clean$paper_Smoking.Status[luad_anot_clean$paper_Smoking.Status== "[Not Available]"] <-NA
 luad_anot_clean %>%
@@ -410,27 +411,33 @@ luad_anot_clean %>%
   ggplot(aes(x = paper_Smoking.Status)) +
   geom_bar()
 ```
-Examine Transversion.High.Low and Fusions
+Most of the patients have been smokers or are smokers, only a small proportion (14%) are life long non-smokers.
+
 ```{r}
+#Examine Transversion.High.Low and Fusions
 table(luad_anot_clean$paper_Transversion.High.Low)
 table(luad_anot_clean$paper_Fusions)
 ```
 EML4-ALK and CLTC-ROS1 are are the most common fusions, CLTC-ROS1 is present in the prox.-inflam expression subtype and EML4-ALK is present in the TRU subtype
 
-#Explore iCluster and CIMP methylation signature via cross-tabulation
+
 ```{r}
+#Explore iCluster and CIMP methylation signature via cross-tabulation
 table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_CIMP.methylation.signature.)
 ```
-most high CIMp methylation signature samples are in Cluster Group 3 and 4, in Cluster Group 1 are only low CIMP methylation samples
+Most high CIMp methylation signature samples are in Cluster Group 3 and 4, in Cluster Group 1 are only low CIMP methylation samples.
 
-other cross tabulations with iCluster Group
+cross tabulation of iCluster Group with Sex shows that the male and female patient samples are not equally grouped, the biggest subgroup is female patients with iClusterGroup 5
+
+cross tabulation of iCluster Group with Age shows no clear association
 ```{r}
+#other cross tabulations with iCluster Group
 table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_expression_subtype)
 
-#cross tabulation of iCluster Group with Sex shows that the male and female patient samples are not equally grouped, the biggest subgroup is female patients with iClusterGroup 5
+
 barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_Sex),
         beside=TRUE, legend=TRUE)
-#cross tabulation of iCluster Group with Age shows no clear association
+
 barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_Age.at.diagnosis))
 barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$ajcc_pathologic_stage))
 ```
@@ -817,7 +824,7 @@ imp_integrater(es.rf.imp, es.mult.imp) -> es.overlap; es.overlap
 
 ### Target: Tumor Stage
 
-We now do the exact same for the prediction of tumor stage, with the addition of splitting the tumour stages into only two categories: Early and Late.
+We now do the exact same for the prediction of tumor stage, with the addition of splitting the tumor stages into only two categories: Early and Late.
 
 ```{r, include=T}
 data <- cbind(annot, t(exp))
@@ -1021,6 +1028,7 @@ confusionMatrix(
   data = pred_logreg,
   reference = test_data$paper_expression_subtype)
 ```
+
 Random Forest
 ```{r, include=TRUE}
 model_randomforest <- randomForest(paper_expression_subtype ~ ., data = train_data, importance = TRUE, ntree = 500)
@@ -1057,6 +1065,7 @@ testing the knn model
 pred_knn <- predict(model_knn, newdata = test_norm)
 confusionMatrix(pred_knn, test_norm$paper_expression_subtype)
 ```
+
 
 AUC ROC for all 3 models
 ```{r, include=TRUE}
@@ -1097,8 +1106,8 @@ roc_knn <- multiclass.roc(
 roc_knn$auc
 ``` 
 The logistic regression model
-We are comparing all 3 models for predicting the variables "PI", "PP" and "TRU" seperatly.
-```{r}
+We are comparing all 3 models for predicting the variables "PI", "PP" and "TRU" seperatly by ploting the ROC curves. We see that the logistic regression model is performing better than the random forest.
+```{r, include=TRUE}
 roc_PI_rf <- roc(
   test_data$paper_expression_subtype == "PI",
   randomforest_prob[, "PI"])
@@ -1112,7 +1121,7 @@ lines(roc_PI_logreg, col="green")
 lines(roc_PI_knn, col="blue")
 ```
 
-```{r}
+```{r, include=TRUE}
 roc_PP_rf <- roc(
   test_data$paper_expression_subtype == "PP",
   randomforest_prob[, "PP"])
@@ -1126,7 +1135,7 @@ lines(roc_PP_logreg, col="green")
 lines(roc_PP_knn, col="blue")
 ```
 
-```{r}
+```{r, include=TRUE}
 roc_TRU_rf <- roc(
   test_data$paper_expression_subtype == "TRU",
   randomforest_prob[, "TRU"])
