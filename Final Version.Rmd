@@ -641,7 +641,7 @@ umap_with_annot <- umap_df %>%
       TRUE ~ "Other"
     ))
 p1 <- ggplot(umap_with_annot, aes(UMAP1, UMAP2, colour=sample_type)) + geom_point()
-p1|plot_spacer()
+(p1)
 ```
 #UMAP on top PCs
 #top k PCs extrahieren
@@ -693,7 +693,7 @@ umap50_with_annot <- umap_df_50 %>%
 p3 <- ggplot(umap50_with_annot, aes(UMAP50_1, UMAP50_2, colour=paper_expression_subtype)) +
   geom_point()
 
-(p1|p2)/(p3|plot_spacer())
+(p1|p2)/(p3)
 ```
 
 
