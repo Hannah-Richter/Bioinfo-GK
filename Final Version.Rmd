@@ -389,6 +389,7 @@ mean(luad_anot_clean$paper_Age.at.diagnosis, na.rm = TRUE)
 median(luad_anot_clean$paper_Age.at.diagnosis, na.rm = TRUE)
 ```
 Pathologic stages 1A and 1B are the most common among the patients.
+
 Patients are between 41 and 85 years old, with a mean age of 65.5 years.
 
 ```{r}
@@ -464,7 +465,7 @@ high.norm.genes = which(rank(norm.test)>{max(rank(norm.test))-5})
 p1 <- qq_plotter_5(exp,low.norm.genes,"Low normality genes")
 p2 <- qq_plotter_5(exp,high.norm.genes, "High normality genes")
 
-p1 + p2 + plot_layout(ncol=2)
+p1|p2
 ```
 
 Next, we perform quantile normalisation of the gene expression data. The Shapiro-Wilks test now yields only ~77% of genes with a p-value lower than 0.05. 
@@ -482,7 +483,7 @@ We can redo the QQ-plots for the same genes to see what changed. The distributio
 p1 <- qq_plotter_5(q.norm.exp,low.norm.genes,"Low normality genes\nafter quantile normalisation")
 p2 <- qq_plotter_5(q.norm.exp,high.norm.genes,"High normality genes\nafter quantile normalisation")
 
-p1 + p2 + plot_layout(ncol=2)
+p1|p2
 ```
 
 # Data Analysis
@@ -538,8 +539,9 @@ pca_with_annot <- as.data.frame(pca$x) %>%
   tibble::rownames_to_column("barcode") %>%
   merge(luad_anot_clean, by = "barcode")
 ```
-First we want to see if the tumor samples are clustered together and away from the normal tissue samples.
-```{r differentiate tumor and normal samples, include=T}
+
+```{r differentiate tumor and normal samples}
+#First we want to see if the tumor samples are clustered together and away from the normal tissue samples.
 pca_with_annot <- pca_with_annot %>%
   mutate(
     sample_code = substr(barcode, 14, 15),
@@ -547,20 +549,17 @@ pca_with_annot <- pca_with_annot %>%
       sample_code == "01" ~ "Tumor",
       sample_code == "11" ~ "Normal",
       TRUE ~ "Other" ))
-
-p1 <- ggplot(pca_with_annot,
+ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = sample_type)) +
   geom_point() +
   scale_colour_manual(values = c("blue", "red"))
-p2 <- ggplot(pca_with_annot,
+ggplot(pca_with_annot,
        aes(x = PC1, y = PC3, colour = sample_type)) +
   geom_point() +
   scale_colour_manual(values = c("blue", "red"))
-
-p1 + p2 + plot_layout(ncol=2)
 ```
-
-```{r, include=T}
+The tumor samples are clustered together and away from the normal samples.
+```{r }
 ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = paper_expression_subtype)) +
   geom_point() +
@@ -570,7 +569,7 @@ ggplot(pca_with_annot,
   geom_point() +
   scale_colour_manual(values = c( "red","blue", "yellow"))
 ```
-```{r, include=T}
+```{r }
 ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = paper_Smoking.Status)) +
   geom_point() +
@@ -581,10 +580,8 @@ ggplot(pca_with_annot,
   scale_colour_manual(values = c( "red","blue", "yellow", "green", "grey"))
 ```
 
-PCA isn`t seperating the feature subtypes clearly
-
-Rtsne t-distributed Stochastic Neighbor Embedding
-```{r Rtsne, include=T}
+PCA isn`t separating the feature subtypes clearly so we perform t-distributed Stochastic Neighbor Embedding. We first want to see again if the normal and tumor samples are separating, after we separate the expression subtypes. They are roughly clustering together.
+```{r Rtsne}
 tsne_input <- luad_matrix.tibble %>%
   slice(highVarRows) %>%
   as.matrix() %>%
@@ -613,17 +610,17 @@ tsne_with_annot <- tsne_df %>%
       TRUE ~ "Other"
     ))
   
-p1 <- ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=sample_type)) +
+ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=sample_type)) +
   geom_point()
-p2 <- ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=paper_expression_subtype)) +
+ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=paper_expression_subtype)) +
   geom_point()
 
-p1 + p2 + plot_layout(ncol=2)
 ```
 
-UMAP Uniform Manifold Approximation and Projection
 
-```{r UMAP, include=T, out.width="50%", fig.align="left", fig.width=4} 
+
+```{r UMAP, include=TRUE} 
+#UMAP Uniform Manifold Approximation and Projection
 umap_input <- t(luad_matrix)
 luad.umap <- umap(umap_input)
 samples <- rownames(umap_input)
@@ -645,9 +642,10 @@ umap_with_annot <- umap_df %>%
     ))
 ggplot(umap_with_annot, aes(UMAP1, UMAP2, colour=sample_type)) + geom_point()
 ```
+
+```{r UMAPtopPCs, include=TRUE}
 #UMAP on top PCs
 #top k PCs extrahieren
-```{r UMAPtopPCs, include=T}
 pca_umap = luad_matrix.tibble  %>%
   t() %>% 
   prcomp(center = FALSE, scale = FALSE) 
@@ -666,7 +664,7 @@ umap_df_10 <- data.frame(
 umap10_with_annot <- umap_df_10 %>%
   left_join(luad_anot_clean, by = "barcode")
 
-p1 <- ggplot(umap10_with_annot, aes(UMAP1, UMAP2, colour=paper_expression_subtype)) +
+ggplot(umap10_with_annot, aes(UMAP1, UMAP2, colour=paper_expression_subtype)) +
   geom_point()
 
 umap_30 <- umap(pc_30)
@@ -679,7 +677,7 @@ umap_df_30 <- data.frame(
 umap30_with_annot <- umap_df_30 %>%
   left_join(luad_anot_clean, by = "barcode")
 
-p2 <- ggplot(umap30_with_annot, aes(UMAP30_1, UMAP30_2, colour=paper_expression_subtype)) +
+ggplot(umap30_with_annot, aes(UMAP30_1, UMAP30_2, colour=paper_expression_subtype)) +
   geom_point()
 
 umap_50 <- umap(pc_50)
@@ -692,12 +690,10 @@ umap_df_50 <- data.frame(
 umap50_with_annot <- umap_df_50 %>%
   left_join(luad_anot_clean, by = "barcode")
 
-p3 <- ggplot(umap50_with_annot, aes(UMAP50_1, UMAP50_2, colour=paper_expression_subtype)) +
+ggplot(umap50_with_annot, aes(UMAP50_1, UMAP50_2, colour=paper_expression_subtype)) +
   geom_point()
-
-p1 + p2 + p3 + plot_layout(ncol=2)
 ```
-
+With only the 10 top PCs the clusters are more clearly clustered together. More PCs bring more noise to the UMAP plot. 
 
 ## Differential Expression Analysis
 
@@ -733,10 +729,9 @@ top.5.long = top.5.annotated %>% rownames_to_column(var = "Sample ID") %>% pivot
 
 ggplot(top.5.long, aes(x = subtype, y = expr, fill = subtype)) +
   geom_boxplot() +
-  facet_wrap(~gene, scales = "free_y") +
-  labs(x = "Subtype", y = "Expression", title = "Boxplot of Top 5 DEG Expression by Subtype") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90), plot.title = element_text(hjust = 0.5))
+  facet_wrap(~gene) +
+  labs(x = "Subtype", y = "Expression") +
+  theme_bw()
 ```
 
 ## Expression Correlation amongst Highly Differentially Expressed Genes
@@ -757,19 +752,19 @@ Furthermore, we want to compare the top 30 DEGs to clinical feature. For this, w
 
 ```{r, include=T}
 cor.mat.clin.exp = exp_clin_correlater(top.30.exp,annot)
-colnames(cor.mat.clin.exp) = c("Age at diagnosis","Mutations", "Mutations per Mb", "Ploidy", "Purity")
+colnames(cor.mat.clin.exp) = c("Age at diagnosis","Non Silent Mutations", "Non Silent Mutations per Mb", "Ploidy", "Purity")
 
-pheatmap(cor.mat.clin.exp, treeheight_row = 0, treeheight_col = 0, fontsize = 7, main = "Correlation between continuous clinical and moecular variables and top 30 DEGs", fontsize_row = 6, fontsize_col = 6)
+pheatmap(cor.mat.clin.exp, treeheight_row = 0, treeheight_col = 0, fontsize = 7, fontsize_row = 6, fontsize_col = 6)
 ```
 
 Finally, with respect to the differential gene expression, we want to ascertain how top 30 DEG expression differs between tumour stages. Curiously, many of the top DEGs are differentially expressed only in Stage IA vs. rest
 
 ```{r, include=T}
-t.top.30.exp.df = t(top.30.exp[which(annot$is.tumour),]) %>%
+t.top.30.exp.df = t(top.30.exp) %>%
   as.data.frame()
-tumour.stage.DGE.30 = DGE_analyser(t.top.30.exp.df,annot$Tumor.stage[which(annot$is.tumour)])
+tumour.stage.DGE.30 = DGE_analyser(t.top.30.exp.df,annot$Tumor.stage)
 
-pheatmap(tumour.stage.DGE.30, cluster_cols = FALSE, cluster_rows = TRUE, treeheight_row = 0, main = "Q-Values of Top 30 genes compared across Stages", fontsize = 7, fontsize_row = 6, fontsize_col = 6)
+pheatmap(tumour.stage.DGE.30, cluster_cols = FALSE, cluster_rows = TRUE, treeheight_row = 0, main = "Q-Values of Top 30 genes compared across Subtypes", fontsize = 7, fontsize_row = 6, fontsize_col = 6)
 
 ```
 
@@ -886,7 +881,7 @@ multi_roc_plotter(es.mult.reg, es.testing, "Multinomial Logistical Classifier RO
 
 We now take a look at the ROC curves for the tumour stage classifiers. We see that random forest classification and kNN outstrip logistical regression.
 
-```{r, include=T, fig.height=8}
+```{r, include=T}
 layout(matrix(c(1,2,3,4), 2))
 
 multi_roc_plotter(ts.rf.reg, ts.testing, "Random Forest Regression ROC-Curve")
@@ -941,8 +936,10 @@ ts.knn.cv.reg %>% predict(ts.testing) %>% confusionMatrix(ts.testing$Tumor.stage
 
 Also the ROC Curve looks less healthy.
 
-```{r, include=T, out.width="50%", fig.align="left", fig.width=4}
-multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of kNN Regression")
+```{r, include=T}
+layout(matrix(c(1,2),1))
+
+multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-Nearest Neighbours Regression with Balanced Target Class")
 ```
 
 We determined the top 5 genes for the classifiers for each of the classification problems (expression subtype, tumour stage) by looking at the best-performer and by integrating across classifiers to find an overlap of top-5 important genes. We can here see, that the top-5 differentially expressed genes have no overlap with the most important predictors. 
@@ -1193,16 +1190,16 @@ top.5.var.exp = exp[which(rownames(exp) %in% top.5.var),] %>%
   t()
 top.5.var.annotated = top.5.var.exp %>%
   as.data.frame() %>%
-  mutate(stage=annot$Tumor.stage) %>% .[complete.cases(.),]
+  mutate(subtype=annot$Tumor.stage) %>% .[complete.cases(.),]
 
 top.5.var.long = top.5.var.annotated %>% rownames_to_column(var = "Sample ID") %>% pivot_longer(cols = c(colnames(top.5.var.annotated)[1:5]), names_to = "gene", values_to = "expr")
 
-ggplot(top.5.var.long, aes(x = stage, y = expr, fill = stage)) +
+ggplot(top.5.var.long, aes(x = subtype, y = expr, fill = subtype)) +
   geom_boxplot() +
-  facet_wrap(~gene, scales = "free_y") +
-  labs(x = "Stage", y = "Expression", title = "Top 5 most important genes by tumour stage") +
+  facet_wrap(~gene) +
+  labs(x = "Subtype", y = "Expression") +
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 75, hjust = 1), plot.title = element_text(hjust = 0.5))
+  theme(axis.text.x = element_text(angle = 75, hjust = 1))
 
 top.5.var.anot = annot %>%
   select(expression_subtype,Tumor.stage,Smoking.Status,Ploidy.ABSOLUTE.calls,Nonsilent.Mutations)
@@ -1212,7 +1209,7 @@ top.5.var.exp.comp = top.5.var.exp[which(complete.cases(top.5.var.anot)),]
 
 top.5.var.anot = top.5.var.anot[which(complete.cases(top.5.var.anot)),]
 
-pheatmap(top.5.var.exp.comp, show_rownames = FALSE, treeheight_row = 0,annotation_row = top.5.var.anot, main = "Expression of the 5 most important genes", fontsize = 7, fontsize_row = 6, fontsize_col = 6)
+pheatmap(top.5.var.exp.comp, show_rownames = FALSE, treeheight_row = 0,annotation_row = top.5.var.anot, fontsize = 7, fontsize_row = 6, fontsize_col = 6)
 
 ```
 
