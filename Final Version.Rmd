@@ -539,7 +539,7 @@ pca_with_annot <- as.data.frame(pca$x) %>%
   merge(luad_anot_clean, by = "barcode")
 ```
 
-```{r differentiate tumor and normal samples}
+```{r differentiate tumor and normal samples, include=TRUE}
 #First we want to see if the tumor samples are clustered together and away from the normal tissue samples.
 pca_with_annot <- pca_with_annot %>%
   mutate(
@@ -548,39 +548,45 @@ pca_with_annot <- pca_with_annot %>%
       sample_code == "01" ~ "Tumor",
       sample_code == "11" ~ "Normal",
       TRUE ~ "Other" ))
-ggplot(pca_with_annot,
+p1 <- ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = sample_type)) +
   geom_point() +
-  scale_colour_manual(values = c("blue", "red"))
-ggplot(pca_with_annot,
+  scale_colour_manual(values = c("blue", "red")) 
+p2 <- ggplot(pca_with_annot,
        aes(x = PC1, y = PC3, colour = sample_type)) +
   geom_point() +
   scale_colour_manual(values = c("blue", "red"))
+
+p1|p2
 ```
 The tumor samples are clustered together and away from the normal samples.
-```{r }
-ggplot(pca_with_annot,
+```{r, include=T}
+p1 <- ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = paper_expression_subtype)) +
   geom_point() +
   scale_colour_manual(values = c("yellow", "red","blue"))
-ggplot(pca_with_annot,
+p2 <- ggplot(pca_with_annot,
        aes(x = PC1, y = PC3, colour = paper_expression_subtype)) +
   geom_point() +
   scale_colour_manual(values = c( "red","blue", "yellow"))
+
+p1|p2
 ```
-```{r }
-ggplot(pca_with_annot,
+```{r, include=T}
+p1 <- ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = paper_Smoking.Status)) +
   geom_point() +
   scale_colour_manual(values = c("yellow", "red","blue", "green", "grey"))
-ggplot(pca_with_annot,
+p2 <- ggplot(pca_with_annot,
        aes(x = PC1, y = PC3, colour = paper_Smoking.Status)) +
   geom_point() +
   scale_colour_manual(values = c( "red","blue", "yellow", "green", "grey"))
+
+p1|p2
 ```
 
 PCA isn`t separating the feature subtypes clearly so we perform t-distributed Stochastic Neighbor Embedding. We first want to see again if the normal and tumor samples are separating, after we separate the expression subtypes. They are roughly clustering together.
-```{r Rtsne}
+```{r Rtsne, include=T}
 tsne_input <- luad_matrix.tibble %>%
   slice(highVarRows) %>%
   as.matrix() %>%
@@ -609,16 +615,17 @@ tsne_with_annot <- tsne_df %>%
       TRUE ~ "Other"
     ))
   
-ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=sample_type)) +
+p1 <- ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=sample_type)) +
   geom_point()
-ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=paper_expression_subtype)) +
+p2 <- ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=paper_expression_subtype)) +
   geom_point()
 
+p1|p2
 ```
 
 
 
-```{r UMAP, include=TRUE} 
+```{r UMAP, include=TRUE, fig.width=4, fig.height=4, out.width="50%", fig.align="left"} 
 #UMAP Uniform Manifold Approximation and Projection
 umap_input <- t(luad_matrix)
 luad.umap <- umap(umap_input)
@@ -663,7 +670,7 @@ umap_df_10 <- data.frame(
 umap10_with_annot <- umap_df_10 %>%
   left_join(luad_anot_clean, by = "barcode")
 
-ggplot(umap10_with_annot, aes(UMAP1, UMAP2, colour=paper_expression_subtype)) +
+p1 <- ggplot(umap10_with_annot, aes(UMAP1, UMAP2, colour=paper_expression_subtype)) +
   geom_point()
 
 umap_30 <- umap(pc_30)
@@ -676,7 +683,7 @@ umap_df_30 <- data.frame(
 umap30_with_annot <- umap_df_30 %>%
   left_join(luad_anot_clean, by = "barcode")
 
-ggplot(umap30_with_annot, aes(UMAP30_1, UMAP30_2, colour=paper_expression_subtype)) +
+p2 <- ggplot(umap30_with_annot, aes(UMAP30_1, UMAP30_2, colour=paper_expression_subtype)) +
   geom_point()
 
 umap_50 <- umap(pc_50)
@@ -689,8 +696,10 @@ umap_df_50 <- data.frame(
 umap50_with_annot <- umap_df_50 %>%
   left_join(luad_anot_clean, by = "barcode")
 
-ggplot(umap50_with_annot, aes(UMAP50_1, UMAP50_2, colour=paper_expression_subtype)) +
+p3 <- ggplot(umap50_with_annot, aes(UMAP50_1, UMAP50_2, colour=paper_expression_subtype)) +
   geom_point()
+
+(p1|p2)/(p3|plot_spacer())
 ```
 With only the 10 top PCs the clusters are more clearly clustered together. More PCs bring more noise to the UMAP plot. 
 
@@ -935,10 +944,8 @@ ts.knn.cv.reg %>% predict(ts.testing) %>% confusionMatrix(ts.testing$Tumor.stage
 
 Also the ROC Curve looks less healthy.
 
-```{r, include=T}
-layout(matrix(c(1,2),1))
-
-multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-Nearest Neighbours Regression with Balanced Target Class")
+```{r, include=T, fig.width=4, fig.height=4, out.width="50%", fig.align="left"}
+multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-Nearest Neighbours Regression")
 ```
 
 We determined the top 5 genes for the classifiers for each of the classification problems (expression subtype, tumour stage) by looking at the best-performer and by integrating across classifiers to find an overlap of top-5 important genes. We can here see, that the top-5 differentially expressed genes have no overlap with the most important predictors. 
