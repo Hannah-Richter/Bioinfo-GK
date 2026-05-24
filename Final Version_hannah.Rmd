@@ -1,14 +1,12 @@
 ---
-title: An Analysis of Clinical Variables and Gene Expression Data across Biopsies
-  from Patients with Lung Adenocarcinomata
+title: "An Analysis of Clinical Variables and Gene Expression Data across Biopsies from Patients with Lung Adenocarcinomata"
 author: "Cedric, Hannah, Merlin"
 date: "`r Sys.Date()`"
 output:
-  html_document:
-    df_print: paged
   pdf_document:
     latex_engine: xelatex
-header-includes: \usepackage[fontsize=9pt]{scrextend}
+header-includes:
+  - \usepackage[fontsize=9pt]{scrextend}
 ---
 
 ```{r setup, include=F, echo=F}
@@ -290,6 +288,10 @@ exp_clin_correlater = function(exp, annot){
 }
 ```
 
+# Introduction
+
+
+
 # Loading and Cleaning of Annotation and Expression Data
 
 We want to clean up our annotation file. To do this we must first take a look at the file.
@@ -438,6 +440,7 @@ barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_Sex),
 barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_Age.at.diagnosis))
 barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$ajcc_pathologic_stage))
 ```
+
 
 ## Expression Data
 
@@ -708,11 +711,9 @@ top.5.long = top.5.annotated %>% rownames_to_column(var = "Sample ID") %>% pivot
 
 ggplot(top.5.long, aes(x = subtype, y = expr, fill = subtype)) +
   geom_boxplot() +
-  facet_wrap(~gene, scale = "free_y") +
-  labs(x = "Subtype", y = "Expression", title = "Expression of top 5 genes across subtypes") +
-  theme_bw()+
-  theme(axis.text.x = element_text(angle = 75, hjust = 1))
-  
+  facet_wrap(~gene) +
+  labs(x = "Subtype", y = "Expression") +
+  theme_bw()
 ```
 
 ## Expression Correlation amongst Highly Differentially Expressed Genes
@@ -735,7 +736,7 @@ Furthermore, we want to compare the top 30 DEGs to clinical feature. For this, w
 cor.mat.clin.exp = exp_clin_correlater(top.30.exp,annot)
 colnames(cor.mat.clin.exp) = c("Age at diagnosis","Non Silent Mutations", "Non Silent Mutations per Mb", "Ploidy", "Purity")
 
-pheatmap(cor.mat.clin.exp, treeheight_row = 0, treeheight_col = 0, main = "Correlation between continuous variables and top 30 DEGs",fontsize = 7, fontsize_row = 6, fontsize_col = 6)
+pheatmap(cor.mat.clin.exp, treeheight_row = 0, treeheight_col = 0, fontsize = 7, fontsize_row = 6, fontsize_col = 6)
 ```
 
 Finally, with respect to the differential gene expression, we want to ascertain how top 30 DEG expression differs between tumour stages. Curiously, many of the top DEGs are differentially expressed only in Stage IA vs. rest
@@ -778,7 +779,7 @@ es.rf.pred <- predict(es.rf.reg, es.testing[,-1])
 es.mult.pred <- predict(es.mult.reg, es.testing[,-1])
 ```
 
-We want to take a look at the 5 most important variables for both models. For the random forest regression, we simply use variable importance as the metric. For multinomial logistical regression, we use the euclidean deviance of the coefficients from zero for each gene. These differ. 
+We want to take a look at the 5 most important variables for both models. For the random forest regression, we simply use variable importance as the metric. For multinomial logistical regression, we use the euclidean deviance of the coefficients from zero for each gene. These differ, though there is overlap. 
 
 ```{r}
 es.rf.imp <- variable_importance(es.rf.reg, mode="rf") %>% 
@@ -793,7 +794,7 @@ es.mult.imp[1:5]
 
 We then walk through both lists of genes sorted by their importance to the models until we reach an overlaping selection of 5. The given depth shows us how many of the sorted list we need to include to get our overlap.
 
-```{r, include=TRUE}
+```{r}
 imp_integrater(es.rf.imp, es.mult.imp) -> es.overlap; es.overlap
 ```
 
@@ -845,7 +846,7 @@ ts.knn.imp[1:5]
 
 We thus again look at how far we need to go to find an overlap between all three models of 5 important variables. 
 
-```{r, include=TRUE}
+```{r}
 imp_integrater(imp_integrater(ts.rf.imp, ts.log.imp, integ.len = 12)$important.variables, imp_integrater(ts.rf.imp, ts.knn.imp, integ.len = 12)$important.variables) -> ts.overlap; ts.overlap
 ```
 
@@ -860,9 +861,9 @@ multi_roc_plotter(es.rf.reg, es.testing, "Random Forest Classifier ROC-Curve")
 multi_roc_plotter(es.mult.reg, es.testing, "Multinomial Logistical Classifier ROC-Curve")
 ```
 
-We now take a look at the ROC curves for the tumour stage classifiers. We see that all classifiers are basically useless, though on other seeds, random forest classification and kNN outstripped logistical regression.
+We now take a look at the ROC curves for the tumour stage classifiers. We see that random forest classification and kNN outstrip logistical regression.
 
-```{r, include=T, fig.height=8}
+```{r, include=T}
 layout(matrix(c(1,2,3,4), 2))
 
 multi_roc_plotter(ts.rf.reg, ts.testing, "Random Forest Regression ROC-Curve")
@@ -870,7 +871,7 @@ multi_roc_plotter(ts.knn.reg, ts.testing, "k-Nearest Neighbours Regression ROC-C
 roc_plotter(ts.log.reg, ts.testing, "Binomial Logistical Regression ROC-Curve")
 ```
 
-When we look at key values for these classifiers (first table expression subtype classification, second table tumour stage classification) we can see why some of them don't perform well. The performance of the expression type classifiers are incredibly sensitive to seed changes. They are unstable and exceedingly subpar. In different runs random forest had a far better accuracy of approximately 0.8.
+When we look at key values for these classifiers (first table expression subtype classification, second table tumour stage classification) we can see why some of them don't perform well.
 
 ```{r, include=T}
 for (i in c("es.rf","es.mult")) {
@@ -898,11 +899,11 @@ ts.comp.table
 
 In the prediction of tumour stage, we have the problem, that our samples at Early stage far outnumber those at Late stage.
 
-```{r}
+```{r, include=T}
 table(ts.training$Tumor.stage)
 ```
 
-Rerunning training for the best performer (highest accuracy and precision) using a down-sampled training data set improves performance in this seed. Other seed vary. The data are extremely poor.
+Rerunning training for the best performer (highest accuracy and precision) using a down-sampled training data set significantly worsens performance, though precision improves somewhat.
 
 ```{r, include=T}
 ts.knn.cv.reg <- train(
@@ -915,21 +916,23 @@ ts.knn.cv.reg <- train(
 ts.knn.cv.reg %>% predict(ts.testing) %>% confusionMatrix(ts.testing$Tumor.stage) %>% confusion_extracter()
 ```
 
-Also the ROC Curve looks healthier in this seed.
+Also the ROC Curve looks less healthy.
 
-```{r, include=T, fig.width=4, fig.height=4, out.width="50%", fig.align="left"}
-multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-NN Regression")
+```{r, include=T}
+layout(matrix(c(1,2),1))
+
+multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-Nearest Neighbours Regression with Balanced Target Class")
 ```
 
 We determined the top 5 genes for the classifiers for each of the classification problems (expression subtype, tumour stage) by looking at the best-performer and by integrating across classifiers to find an overlap of top-5 important genes. We can here see, that the top-5 differentially expressed genes have no overlap with the most important predictors. 
 
-```{r, include=T}
+```{r}
 for (i in c("es.rf.imp","es.overlap","ts.knn.imp","ts.overlap")) {top.5.genes %in% get(i)} %>% print()
 ```
 
 This is somewhat surprising, but may be due to the DEGs being found by 1-vs-rest comparison and the classifiers lumping all samples of a expression subtype or tumour stage together. Furthermore, we may find overlap, when looking at genes less important to the classifiers. We do so for one example.
 
-```{r, include=T}
+```{r}
 imp_integrater(top.50.genes, es.rf.imp)
 ```
 
@@ -1070,11 +1073,11 @@ We are comparing all 3 models for predicting the variables "PI", "PP" and "TRU" 
 ```{r, include=TRUE}
 roc_PI_rf <- roc(
   test_data$paper_expression_subtype == "PI",
-  randomforest_prob[, "PI"], quiet=T)
+  randomforest_prob[, "PI"])
 roc_PI_logreg<-roc( test_data$paper_expression_subtype == "PI",
-  logreg_prob[, "PI"], quiet=T)
+  logreg_prob[, "PI"])
 roc_PI_knn<-roc( test_data$paper_expression_subtype == "PI",
-  knn_prob[, "PI"], quiet=T)
+  knn_prob[, "PI"])
 
 plot(roc_PI_rf, col="red")
 lines(roc_PI_logreg, col="green")
@@ -1083,11 +1086,11 @@ lines(roc_PI_knn, col="blue")
 ```{r, include=TRUE}
 roc_PP_rf <- roc(
   test_data$paper_expression_subtype == "PP",
-  randomforest_prob[, "PP"], quiet=T)
+  randomforest_prob[, "PP"])
 roc_PP_logreg<-roc( test_data$paper_expression_subtype == "PP",
-  logreg_prob[, "PP"], quiet=T)
+  logreg_prob[, "PP"])
 roc_PP_knn<-roc( test_data$paper_expression_subtype == "PP",
-  knn_prob[, "PP"], quiet=T)
+  knn_prob[, "PP"])
 
 plot(roc_PP_rf, col="red")
 lines(roc_PP_logreg, col="green")
@@ -1096,11 +1099,11 @@ lines(roc_PP_knn, col="blue")
 ```{r, include=TRUE}
 roc_TRU_rf <- roc(
   test_data$paper_expression_subtype == "TRU",
-  randomforest_prob[, "TRU"], quiet=T)
+  randomforest_prob[, "TRU"])
 roc_TRU_logreg<-roc( test_data$paper_expression_subtype == "TRU",
-  logreg_prob[, "TRU"], quiet=T)
+  logreg_prob[, "TRU"])
 roc_TRU_knn<-roc( test_data$paper_expression_subtype == "TRU",
-  knn_prob[, "TRU"], quiet=T)
+  knn_prob[, "TRU"])
 
 plot(roc_TRU_rf, col="red")
 lines(roc_TRU_logreg, col="green")
@@ -1111,7 +1114,7 @@ The knn model showed poor predictive performance with an AUC of 0.5, which means
 
 ## Integrative Classifier
 
-We now build a integrative classifier, using the top-25 most important genes for our random forest classifier targeting expression subtype as well as the clinical variables "expression_subtype", "Tumor.stage", "Nonsilent.Mutations", "Ploidy.ABSOLUTE.calls","Purity.ABSOLUTE.calls", "Smoking.Status", and "Age.at.diagnosis". As can be seen from the two ROC graphs and the comparison table of key characteristics, this does improve the model. The quality of both models depends heavily on seed and both classifiers are highly unstable and relatively poor. Observation count is probably simply too small.
+We now build a integrative classifier, using the top-25 most important genes for our random forest classifier targeting expression subtype as well as the clinical variables "expression_subtype", "Tumor.stage", "Nonsilent.Mutations", "Ploidy.ABSOLUTE.calls","Purity.ABSOLUTE.calls", "Smoking.Status", and "Age.at.diagnosis". As can be seen from the two ROC graphs and the comparison table of key characteristics, this doesn't improve the model, despite the training data having almost the same number of observations.
 
 ```{r,include=T}
 data <- cbind(annot, t(exp)[,es.rf.imp[1:25]])
@@ -1136,7 +1139,7 @@ int.es.rf.pred <- predict(int.es.rf.reg, int.es.testing[,-1])
 
 layout(matrix(c(1,2), 1))
 
-multi_roc_plotter(int.es.rf.reg, int.es.testing, "Integrated Random Forest Classifier ROC-Curve")
+multi_roc_plotter(int.es.rf.reg, int.es.testing, "Random Forest Classifier ROC-Curve")
 multi_roc_plotter(es.rf.reg, es.testing, "Random Forest Classifier ROC-Curve")
 
 data.frame("Integrated Random Forest"=confusion_extracter(confusionMatrix(int.es.rf.pred, int.es.testing$targets.expression_subtype)), "Non-integrated Random Forest"=es.rf.q)
@@ -1151,14 +1154,14 @@ top.5.var.exp = exp[which(rownames(exp) %in% top.5.var),] %>%
   t()
 top.5.var.annotated = top.5.var.exp %>%
   as.data.frame() %>%
-  mutate(stage=annot$Tumor.stage) %>% .[complete.cases(.),]
+  mutate(subtype=annot$Tumor.stage) %>% .[complete.cases(.),]
 
 top.5.var.long = top.5.var.annotated %>% rownames_to_column(var = "Sample ID") %>% pivot_longer(cols = c(colnames(top.5.var.annotated)[1:5]), names_to = "gene", values_to = "expr")
 
-ggplot(top.5.var.long, aes(x = stage, y = expr, fill = stage)) +
+ggplot(top.5.var.long, aes(x = subtype, y = expr, fill = subtype)) +
   geom_boxplot() +
-  facet_wrap(~gene, scale = "free_y") +
-  labs(x = "Stage", y = "Expression", title = "Expression of the 5 most important genes across tumour stages") +
+  facet_wrap(~gene) +
+  labs(x = "Subtype", y = "Expression") +
   theme_bw() +
   theme(axis.text.x = element_text(angle = 75, hjust = 1))
 
@@ -1170,21 +1173,13 @@ top.5.var.exp.comp = top.5.var.exp[which(complete.cases(top.5.var.anot)),]
 
 top.5.var.anot = top.5.var.anot[which(complete.cases(top.5.var.anot)),]
 
-pheatmap(top.5.var.exp.comp, show_rownames = FALSE, treeheight_row = 0,annotation_row = top.5.var.anot, main = "Expression of top 5 most important genes", fontsize = 7, fontsize_row = 6, fontsize_col = 6)
+pheatmap(top.5.var.exp.comp, show_rownames = FALSE, treeheight_row = 0,annotation_row = top.5.var.anot, fontsize = 7, fontsize_row = 6, fontsize_col = 6)
 
 ```
 
 # Discussion
 
-The given data set is extremely poor and missing a lot of annotation, which significantly lowers their value and the predictive capacity of classifiers trained off them. Most classifiers are poor, whether using expression data or clinical annotation, and all are sensitive to seed changes. The data set contains too few usable observations, as to initialise any well-functioning classifier.
 
-Those genes we found to be predictive (in whatever low capacity that was) are sensible, as they are known to have functions in other cancers and may indeed be able to differentiate various forms of lung adenocarcinomata from one another.
-
-The differentially expressed genes between the subtypes were mostly those, which differed from TRU, to proximal-inflamatory, and proximal-proliferative. This indicates, that TRU might be a more distinct subtype, compared to proximal-inflamatroy, and proximal-proliferative, which may be more closely related.
-
-Correlating the top 30 genes across all samples, both tumour and healthy tissue, revealed two main co-expressed modules which were inversely correlated with one another. One of these module contained a plethora of genes which are known to be downregulated in lung cancers. The second module, which was inversely correlated with the first, instead contained genes which are tendentially upregulated in lung cancers.
-
-As we used the full set of observations, including healthy tissue samples, this might reflect the genetic changes of cancer cells. We posit that this is due the casette of tumour supressor genes being downregulated in tumour tissue and upregulated in healthy tissue, whilst the inverse is true for the casette of tumour associated genes.
 
 # References
 
