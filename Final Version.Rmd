@@ -364,7 +364,72 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 
 # Data Exploration
 
+Explore pathologic stage data
 
+```{r}
+table(luad_anot_clean$ajcc_pathologic_stage)
+ggplot(luad_anot_clean, aes(x=ajcc_pathologic_stage)) + geom_bar() +labs (title="Distribution of pathologic stage", x="pathologic stage", y="frequency")
+
+#Explore Age at diagnosis data
+table(luad_anot_clean$paper_Age.at.diagnosis)
+#prepare the data
+luad_anot_clean$paper_Age.at.diagnosis[luad_anot_clean$paper_Age.at.diagnosis == "[Not Available]"] <-NA
+luad_anot_clean$paper_Age.at.diagnosis <-
+  as.numeric(as.character(luad_anot_clean$paper_Age.at.diagnosis))
+
+luad_anot_clean %>%
+         filter(!is.na(paper_Age.at.diagnosis)) %>% 
+         ggplot(aes(x = paper_Age.at.diagnosis)) +
+         geom_histogram()
+
+mean(luad_anot_clean$paper_Age.at.diagnosis, na.rm = TRUE)
+median(luad_anot_clean$paper_Age.at.diagnosis, na.rm = TRUE)
+```
+Explore patient Sex data
+```{r}
+table(luad_anot_clean$paper_Sex)
+luad_anot_clean$paper_Sex[luad_anot_clean$paper_Sex == "[unknown]"] <-NA
+
+luad_anot_clean %>%
+  filter(!is.na(paper_Sex)) %>% 
+  ggplot(aes(x = paper_Sex)) +
+  geom_bar()
+```
+There are 110 female and 73 male patients
+
+Explore Smoking status data
+```{r}
+table(luad_anot_clean$paper_Smoking.Status)
+luad_anot_clean$paper_Smoking.Status[luad_anot_clean$paper_Smoking.Status== "[Not Available]"] <-NA
+luad_anot_clean %>%
+  filter(!is.na(paper_Smoking.Status)) %>% 
+  ggplot(aes(x = paper_Smoking.Status)) +
+  geom_bar()
+```
+Examine Transversion.High.Low and Fusions
+```{r}
+table(luad_anot_clean$paper_Transversion.High.Low)
+table(luad_anot_clean$paper_Fusions)
+```
+EML4-ALK and CLTC-ROS1 are are the most common fusions, CLTC-ROS1 is present in the prox.-inflam expression subtype and EML4-ALK is present in the TRU subtype
+
+#Explore iCluster and CIMP methylation signature via cross-tabulation
+```{r}
+table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_CIMP.methylation.signature.)
+```
+most high CIMp methylation signature samples are in Cluster Group 3 and 4, in Cluster Group 1 are only low CIMP methylation samples
+
+other cross tabulations with iCluster Group
+```{r}
+table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_expression_subtype)
+
+#cross tabulation of iCluster Group with Sex shows that the male and female patient samples are not equally grouped, the biggest subgroup is female patients with iClusterGroup 5
+barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_Sex),
+        beside=TRUE, legend=TRUE)
+#cross tabulation of iCluster Group with Age shows no clear association
+barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_Age.at.diagnosis))
+barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$ajcc_pathologic_stage))
+```
 
 ## Clinical Annotation
 
