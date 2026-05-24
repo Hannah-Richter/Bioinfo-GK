@@ -893,7 +893,7 @@ multi_roc_plotter(ts.knn.reg, ts.testing, "k-Nearest Neighbours Regression ROC-C
 roc_plotter(ts.log.reg, ts.testing, "Binomial Logistical Regression ROC-Curve")
 ```
 
-When we look at key values for these classifiers (first table expression subtype classification, second table tumour stage classification) we can see why some of them don't perform well.
+When we look at key values for these classifiers (first table expression subtype classification, second table tumour stage classification) we can see why some of them don't perform well. The performance of the expression type classifiers are incredibly sensitive to seed changes. They are unstable and exceedingly subpar. In different runs random forest had a far better accuracy of approximately 0.8.
 
 ```{r, include=T}
 for (i in c("es.rf","es.mult")) {
@@ -1144,7 +1144,7 @@ The knn model showed poor predictive performance with an AUC of 0.5, which means
 
 ## Integrative Classifier
 
-We now build a integrative classifier, using the top-25 most important genes for our random forest classifier targeting expression subtype as well as the clinical variables "expression_subtype", "Tumor.stage", "Nonsilent.Mutations", "Ploidy.ABSOLUTE.calls","Purity.ABSOLUTE.calls", "Smoking.Status", and "Age.at.diagnosis". As can be seen from the two ROC graphs and the comparison table of key characteristics, this doesn't improve the model, despite the training data having almost the same number of observations.
+We now build a integrative classifier, using the top-25 most important genes for our random forest classifier targeting expression subtype as well as the clinical variables "expression_subtype", "Tumor.stage", "Nonsilent.Mutations", "Ploidy.ABSOLUTE.calls","Purity.ABSOLUTE.calls", "Smoking.Status", and "Age.at.diagnosis". As can be seen from the two ROC graphs and the comparison table of key characteristics, this does improve the model. The quality of both models depends heavily on seed and both classifiers are highly unstable and relatively poor. Observation count is probably simply too small.
 
 ```{r,include=T}
 data <- cbind(annot, t(exp)[,es.rf.imp[1:25]])
