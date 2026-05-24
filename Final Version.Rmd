@@ -457,7 +457,7 @@ high.norm.genes = which(rank(norm.test)>{max(rank(norm.test))-5})
 p1 <- qq_plotter_5(exp,low.norm.genes,"Low normality genes")
 p2 <- qq_plotter_5(exp,high.norm.genes, "High normality genes")
 
-p1|p2
+p1 + p2 + plot_layout(ncol=2)
 ```
 
 Next, we perform quantile normalisation of the gene expression data. The Shapiro-Wilks test now yields only ~77% of genes with a p-value lower than 0.05. 
@@ -475,7 +475,7 @@ We can redo the QQ-plots for the same genes to see what changed. The distributio
 p1 <- qq_plotter_5(q.norm.exp,low.norm.genes,"Low normality genes\nafter quantile normalisation")
 p2 <- qq_plotter_5(q.norm.exp,high.norm.genes,"High normality genes\nafter quantile normalisation")
 
-p1|p2
+p1 + p2 + plot_layout(ncol=2)
 ```
 
 # Data Analysis
@@ -550,32 +550,28 @@ p2 <- ggplot(pca_with_annot,
   geom_point() +
   scale_colour_manual(values = c("blue", "red"))
 
-p1|p2
+p1 + p2 + plot_layout(ncol=2)
 ```
 
 ```{r, include=T}
-p1 <- ggplot(pca_with_annot,
+ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = paper_expression_subtype)) +
   geom_point() +
   scale_colour_manual(values = c("yellow", "red","blue"))
-p2 <- ggplot(pca_with_annot,
+ggplot(pca_with_annot,
        aes(x = PC1, y = PC3, colour = paper_expression_subtype)) +
   geom_point() +
   scale_colour_manual(values = c( "red","blue", "yellow"))
-
-p1|p2
 ```
 ```{r, include=T}
-p1 <- ggplot(pca_with_annot,
+ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = paper_Smoking.Status)) +
   geom_point() +
   scale_colour_manual(values = c("yellow", "red","blue", "green", "grey"))
-p2 <- ggplot(pca_with_annot,
+ggplot(pca_with_annot,
        aes(x = PC1, y = PC3, colour = paper_Smoking.Status)) +
   geom_point() +
   scale_colour_manual(values = c( "red","blue", "yellow", "green", "grey"))
-
-p1|p2
 ```
 
 PCA isn`t seperating the feature subtypes clearly
@@ -615,7 +611,7 @@ p1 <- ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=sample_type)) +
 p2 <- ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=paper_expression_subtype)) +
   geom_point()
 
-p1|p2
+p1 + p2 + plot_layout(ncol=2)
 ```
 
 UMAP Uniform Manifold Approximation and Projection
@@ -641,7 +637,7 @@ umap_with_annot <- umap_df %>%
       TRUE ~ "Other"
     ))
 p1 <- ggplot(umap_with_annot, aes(UMAP1, UMAP2, colour=sample_type)) + geom_point()
-(p1)
+p1 + plot_spacer() + plot_layout(ncol=2)
 ```
 #UMAP on top PCs
 #top k PCs extrahieren
@@ -693,7 +689,7 @@ umap50_with_annot <- umap_df_50 %>%
 p3 <- ggplot(umap50_with_annot, aes(UMAP50_1, UMAP50_2, colour=paper_expression_subtype)) +
   geom_point()
 
-(p1|p2)/(p3)
+p1 + p2 + p3 + plot_layout(ncol=2)
 ```
 
 
@@ -940,9 +936,9 @@ ts.knn.cv.reg %>% predict(ts.testing) %>% confusionMatrix(ts.testing$Tumor.stage
 Also the ROC Curve looks less healthy.
 
 ```{r, include=T}
-layout(matrix(c(1,2),1))
+layout(matrix(c(1,2),2))
 
-multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-Nearest Neighbours Regression with Balanced Target Class")
+multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-Nearest Neighbours Regression\nwith Balanced Target Class")
 ```
 
 We determined the top 5 genes for the classifiers for each of the classification problems (expression subtype, tumour stage) by looking at the best-performer and by integrating across classifiers to find an overlap of top-5 important genes. We can here see, that the top-5 differentially expressed genes have no overlap with the most important predictors. 
