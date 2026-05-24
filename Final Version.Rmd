@@ -420,7 +420,6 @@ table(luad_anot_clean$paper_Fusions)
 ```
 EML4-ALK and CLTC-ROS1 are are the most common fusions, CLTC-ROS1 is present in the prox.-inflam expression subtype and EML4-ALK is present in the TRU subtype
 
-
 ```{r}
 #Explore iCluster and CIMP methylation signature via cross-tabulation
 table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_CIMP.methylation.signature.)
@@ -487,14 +486,10 @@ p1|p2
 
 # Data Analysis
 
-
-
 ## Dimensionality Reduction of Annotation Data
 
-## R Markdown
-The expression data is first presented in a matrix in which the rows are named after the genes.
-
 ```{r matrix}
+#The expression data is first presented in a matrix in which the rows are named after the genes.
 luad_matrix <- luad_exp_clean %>%
   select(-1) %>%
   as.matrix()
@@ -502,32 +497,27 @@ luad_matrix <- scale(luad_matrix)
 rownames(luad_matrix) <- luad_exp_clean[[1]]
 luad_matrix.tibble = as_tibble(luad_matrix)
 ```
-
-The variance is calculated for each gene and represented as a vector.
-
-```{r Varianz}
+```{r Variance}
+#The variance is calculated for each gene and represented as a vector.
 luad_matrix.var = luad_matrix.tibble %>%
   rowwise() %>%
   summarize(variance = var(c_across(where(is.numeric)), na.rm = TRUE)) %>%
   pull(variance)
 ```
-
 ```{r Quantile}
 q75 <- quantile(luad_matrix.var, 0.75, na.rm = TRUE)
 
 highVarRows <- which(luad_matrix.var >= q75)
 ```
-
-We can now perform a principle component analysis. We need to transpose the data, because the PCA function is expecting genes as columns and samples as rows. we only choose the genes with high Variance.
-
 ```{r PCA}
+#We can now perform a principle component analysis. We need to transpose the data, because the PCA function is expecting genes as columns and samples as rows. we only choose the genes with high Variance.
 pca = luad_matrix.tibble  %>%
   slice(highVarRows)%>%
   t() %>% 
   prcomp(center = FALSE, scale = FALSE) 
 ```
-We calculate the variance of each principal component and the proportion of the overall variance that the components are explaining.
 ```{r variance of components}
+#We calculate the variance of each principal component and the proportion of the overall variance that the components are explaining.
 variance = (pca$sdev)^2
 prop.variance = variance/sum(variance)
 names(prop.variance) = 1:length(prop.variance)
@@ -538,7 +528,8 @@ pca_with_annot <- as.data.frame(pca$x) %>%
   tibble::rownames_to_column("barcode") %>%
   merge(luad_anot_clean, by = "barcode")
 ```
-
+Principal component analysis was applied to visualize potential clustering patterns and relationships in the high-dimensional dataset. 
+We first saw, that the tumor samples are clustered together and away from the normal samples. 
 ```{r differentiate tumor and normal samples}
 #First we want to see if the tumor samples are clustered together and away from the normal tissue samples.
 pca_with_annot <- pca_with_annot %>%
@@ -557,7 +548,7 @@ ggplot(pca_with_annot,
   geom_point() +
   scale_colour_manual(values = c("blue", "red"))
 ```
-The tumor samples are clustered together and away from the normal samples.
+
 ```{r }
 ggplot(pca_with_annot,
        aes(x = PC1, y = PC2, colour = paper_expression_subtype)) +
@@ -579,7 +570,7 @@ ggplot(pca_with_annot,
   scale_colour_manual(values = c( "red","blue", "yellow", "green", "grey"))
 ```
 
-PCA isn`t separating the feature subtypes clearly so we perform t-distributed Stochastic Neighbor Embedding. We first want to see again if the normal and tumor samples are separating, after we separate the expression subtypes. They are roughly clustering together.
+Since PCA isn't separating the feature subtypes clearly, we perform t-distributed Stochastic Neighbor Embedding for further visualisation.The resulting projection showed that samples of the same subtype tended to cluster together, but not entirly distinct. 
 ```{r Rtsne}
 tsne_input <- luad_matrix.tibble %>%
   slice(highVarRows) %>%
@@ -615,9 +606,6 @@ ggplot(tsne_with_annot, aes(tSNE1, tSNE2, colour=paper_expression_subtype)) +
   geom_point()
 
 ```
-
-
-
 ```{r UMAP, include=TRUE} 
 #UMAP Uniform Manifold Approximation and Projection
 umap_input <- t(luad_matrix)
@@ -692,7 +680,7 @@ umap50_with_annot <- umap_df_50 %>%
 ggplot(umap50_with_annot, aes(UMAP50_1, UMAP50_2, colour=paper_expression_subtype)) +
   geom_point()
 ```
-With only the 10 top PCs the clusters are more clearly clustered together. More PCs bring more noise to the UMAP plot. 
+Using only the top 10 principal components resulted in more clearly separated and compact clusters, whereas including a larger number of principal components introduced additional noise and reduced cluster separation in the UMAP projection.
 
 ## Differential Expression Analysis
 
