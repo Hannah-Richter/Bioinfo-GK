@@ -364,6 +364,8 @@ With our annotation data (and incidentally also expression data) cleaned up and 
 
 # Data Exploration
 
+## Clinical Annotation
+
 Explore pathologic stage data
 
 ```{r}
@@ -430,9 +432,6 @@ barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_Sex),
 barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$paper_Age.at.diagnosis))
 barplot(table(luad_anot_clean$paper_iCluster.Group, luad_anot_clean$ajcc_pathologic_stage))
 ```
-
-## Clinical Annotation
-
 
 
 ## Expression Data
