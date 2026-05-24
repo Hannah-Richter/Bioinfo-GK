@@ -1054,7 +1054,7 @@ confusionMatrix(pred_knn, test_norm$paper_expression_subtype)
 ```
 
 AUC ROC for all 3 models
-```{r}
+```{r, include=TRUE}
 randomforest_prob <- predict(
   model_randomforest,
   newdata = test_data,
@@ -1066,7 +1066,7 @@ roc_rf <- multiclass.roc(
 roc_rf$auc
 ```
 
-```{r}
+```{r, include=TRUE}
 logreg_prob <- predict(
   model_logreg,
   newdata = test_data,
@@ -1079,7 +1079,7 @@ roc_logreg <- multiclass.roc(
 roc_logreg$auc
 ```
 
-```{r}
+```{r, include=TRUE}
 knn_prob <- predict(
   model_knn,
   newdata = test_data,
@@ -1091,7 +1091,7 @@ roc_knn <- multiclass.roc(
 
 roc_knn$auc
 ``` 
-
+The logistic regression model
 We are comparing all 3 models for predicting the variables "PI", "PP" and "TRU" seperatly.
 ```{r}
 roc_PI_rf <- roc(
