@@ -93,7 +93,7 @@ multi_roc_plotter <- function(reg, truth, title) {
   colours <- heat.colors(len)
   plot(rocs[1][[1]][[1]], col=colours[1], main=title) 
   for (i in 2:len) {lines(rocs[i][[1]][[1]], col=colours[i], lwd=2)}
-  legend("bottomright", legend = names(rocs), col=colours, lwd=2)
+  legend("bottomright", legend = names(rocs), col=colours, lwd=2, cex = 0.7)
 }
 
 permutation_importance <- function(reg, data, target, repeats=10) {
@@ -171,7 +171,7 @@ roc_plotter <- function (reg, truth, title) {
   )
   legend.name <- roc$levels; legend.name <- paste0(legend.name[1],"/",legend.name[2])
   plot(roc, col = "red", main = title, lwd = 2)
-  legend("bottomright", legend = legend.name, col="red", lwd=2)
+  legend("bottomright", legend = legend.name, col="red", lwd=2, cex = 0.7)
 }
 
 confusion_extracter <- function(con) {
@@ -1013,22 +1013,30 @@ train_d <- createDataPartition(luad_anot_clean_num$paper_expression_subtype, p =
 train_data <- luad_anot_clean_num[train_d, ]
 test_data <- luad_anot_clean_num[-train_d, ]
 ```
-calculate a multinomal logistic regression (was too complex with all features so we chose 3: Age at diagnosis, Tumor.stage, Smoking.status)
-We tried different combinations of features to get the best possible model. The model with these 3 features makes the most sense to predict expression_subtype (model has the highest accuracy)
+calculate a multinomal logistic regression (was too complex with all features so I chose 3: Sex, Tumor.stage, Smoking.status)
+```{r}
+model_logreg1 <- multinom(paper_expression_subtype ~ paper_Sex + paper_Tumor.stage + paper_Smoking.Status, data = train_data)
+summary(model_logreg1)
+```
+choose different features
+```{r}
+model_logreg2 <- multinom(paper_expression_subtype ~ paper_Sex + paper_Age.at.diagnosis + paper_Tumor.stage, data = luad_anot_clean_num)
+summary(model_logreg2)
+```
+this model with these 3 features makes the most sense to predict expression_subtype (model has the highest accuracy)
 ```{r}
 model_logreg <-multinom(paper_expression_subtype ~ paper_Tumor.stage + paper_Age.at.diagnosis + paper_Smoking.Status, data = luad_anot_clean_num)
 summary(model_logreg)
 ```
-
 predicting with the test data
-```{r, include=TRUE}
+```{r}
 pred_logreg <- predict(model_logreg, newdata = test_data)
 confusionMatrix(
   data = pred_logreg,
   reference = test_data$paper_expression_subtype)
 ```
 Random Forest
-```{r, include=TRUE}
+```{r}
 model_randomforest <- randomForest(paper_expression_subtype ~ ., data = train_data, importance = TRUE, ntree = 500)
 #check for the most important features 
 varImpPlot(model_randomforest, main = "Feature Importance")
@@ -1037,8 +1045,7 @@ pred_randomforest <- predict(model_randomforest, test_data)
 confusionMatrix(pred_randomforest, test_data$paper_expression_subtype)
 ```
 k-nearest neighbors
-
-First we normalize the data (only features not the outcome, expression_subtype is in column 5 so we are excluding it)
+first normalize the data (only features not the outcome, expression_subtype is in column 5 so we are excluding it)
 ```{r}
 data_preproc <- preProcess(train_data[, -5], method = c("center", "scale"))
 train_norm <- predict(data_preproc, train_data[, -5])
@@ -1059,13 +1066,13 @@ model_knn <- train(
 )
 ```
 testing the knn model
-```{r, include=TRUE}
+```{r}
 pred_knn <- predict(model_knn, newdata = test_norm)
 confusionMatrix(pred_knn, test_norm$paper_expression_subtype)
 ```
 
 AUC ROC for all 3 models
-```{r, include=TRUE}
+```{r}
 randomforest_prob <- predict(
   model_randomforest,
   newdata = test_data,
@@ -1077,7 +1084,7 @@ roc_rf <- multiclass.roc(
 roc_rf$auc
 ```
 
-```{r, include=TRUE}
+```{r}
 logreg_prob <- predict(
   model_logreg,
   newdata = test_data,
@@ -1090,7 +1097,7 @@ roc_logreg <- multiclass.roc(
 roc_logreg$auc
 ```
 
-```{r, include=TRUE}
+```{r}
 knn_prob <- predict(
   model_knn,
   newdata = test_data,
@@ -1102,7 +1109,7 @@ roc_knn <- multiclass.roc(
 
 roc_knn$auc
 ``` 
-The logistic regression model
+
 We are comparing all 3 models for predicting the variables "PI", "PP" and "TRU" seperatly.
 ```{r}
 roc_PI_rf <- roc(
@@ -1146,7 +1153,7 @@ lines(roc_TRU_logreg, col="green")
 lines(roc_TRU_knn, col="blue")
 ```
 
-The knn model showed poor predictive performance with an AUC of 0.5, which means that the prediction it makes is not better than guessing by chance. We know that k nearest neighbor is a distance based model, that's why it is not performing well with categorical variables. We tried to encode dummy variables, to have numerical values but it didn't work.
+The knn model showed poor predictive performance with an AUC of 0.5, which means that the prediction it makes is not better than guessing by chance. We know that k nearest neighbor is a distance based model, thats why it is not performing well with categorical variables. We tried to encode dummy variables, to have numerical values but it didn`t work.
 
 ## Integrative Classifier
 
