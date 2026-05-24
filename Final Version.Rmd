@@ -662,6 +662,8 @@ ts.knn.cv.reg %>% predict(ts.testing) %>% confusionMatrix(ts.testing$Tumor.stage
 Also the ROC Curve looks less healthy.
 
 ```{r, include=T}
+layout(matrix(c(1,2),1))
+
 multi_roc_plotter(ts.knn.cv.reg, ts.testing, "ROC-Curve of k-Nearest Neighbours Regression with Balanced Target Class")
 ```
 
